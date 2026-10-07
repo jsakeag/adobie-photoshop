@@ -22,11 +22,12 @@ int anchor_offset(int old_size, int new_size, int position) {
 
 Document::Document(int width, int height, Color background) {
   require_size(width, height);
-  pixels_ = Image(width, height, background);
+  pixels_ = TiledImage(width, height, background);
 }
 
-Document::Document(Image pixels) : pixels_(std::move(pixels)) {
-  require_size(pixels_.width(), pixels_.height());
+Document::Document(const Image& pixels) {
+  require_size(pixels.width(), pixels.height());
+  pixels_ = TiledImage(pixels);
 }
 
 void Document::resize_canvas(int width, int height, Anchor anchor, Color fill) {
@@ -35,17 +36,29 @@ void Document::resize_canvas(int width, int height, Anchor anchor, Color fill) {
   const int row = static_cast<int>(anchor) / 3;
   const int dx = anchor_offset(this->width(), width, column);
   const int dy = anchor_offset(this->height(), height, row);
-  pixels_ = pixels_.cropped({-dx, -dy, width, height}, fill);
+  // Only the surviving pixels are copied, so the new area stays unallocated.
+  const Rect kept = Rect{-dx, -dy, width, height}.intersect(bounds());
+  TiledImage resized(width, height, fill);
+  if (!kept.empty()) resized.write(pixels_.read(kept), {kept.x + dx, kept.y + dy});
+  pixels_ = std::move(resized);
 }
 
 void Document::crop(Rect r) {
   r = r.intersect(bounds());
   if (r.empty()) throw std::invalid_argument("Crop rectangle misses the canvas");
-  pixels_ = pixels_.cropped(r);
+  pixels_ = TiledImage(pixels_.read(r));
 }
 
-void Document::rotate(Rotation rotation) { pixels_ = pixels_.rotated(rotation); }
-void Document::flip_horizontal() { pixels_ = pixels_.flipped_horizontal(); }
-void Document::flip_vertical() { pixels_ = pixels_.flipped_vertical(); }
+void Document::rotate(Rotation rotation) {
+  pixels_ = TiledImage(flatten().rotated(rotation));
+}
+
+void Document::flip_horizontal() {
+  pixels_ = TiledImage(flatten().flipped_horizontal());
+}
+
+void Document::flip_vertical() {
+  pixels_ = TiledImage(flatten().flipped_vertical());
+}
 
 }  // namespace ps

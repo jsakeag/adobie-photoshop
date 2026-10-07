@@ -2,6 +2,7 @@ add_library(ps_core STATIC
   src/document.cpp
   src/image.cpp
   src/image_io.cpp
+  src/tiled_image.cpp
   src/viewport.cpp
 )
 target_include_directories(ps_core PUBLIC include)

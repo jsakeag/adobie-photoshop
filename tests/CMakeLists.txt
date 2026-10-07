@@ -13,6 +13,7 @@ add_executable(ps_tests
   test_document.cpp
   test_image.cpp
   test_image_io.cpp
+  test_tiled_image.cpp
   test_viewport.cpp
 )
 target_link_libraries(ps_tests PRIVATE ps_core Catch2::Catch2WithMain)

@@ -71,7 +71,7 @@ class App : public nanogui::Screen {
  private:
   void set_document(ps::Document document, const std::string& name) {
     document_ = std::move(document);
-    canvas_->show(document_.pixels());
+    canvas_->show(document_.flatten());
     set_caption(name + " - Mock Photoshop");
   }
 

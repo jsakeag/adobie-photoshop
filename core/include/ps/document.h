@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ps/image.h"
+#include "ps/tiled_image.h"
 
 namespace ps {
 
@@ -17,18 +18,19 @@ enum class Anchor {
   BottomRight,
 };
 
-// An open image. Holds a single pixel buffer until layers arrive.
+// An open image. Holds a single tiled pixel store until layers arrive.
 class Document {
  public:
   Document(int width, int height, Color background = kWhite);
-  explicit Document(Image pixels);
+  explicit Document(const Image& pixels);
 
   int width() const { return pixels_.width(); }
   int height() const { return pixels_.height(); }
   Rect bounds() const { return pixels_.bounds(); }
 
-  const Image& pixels() const { return pixels_; }
-  Image& pixels() { return pixels_; }
+  const TiledImage& pixels() const { return pixels_; }
+  TiledImage& pixels() { return pixels_; }
+  Image flatten() const { return pixels_.flatten(); }
 
   // Canvas Size: grows or trims around the anchor, new area gets `fill`.
   void resize_canvas(int width, int height, Anchor anchor = Anchor::Center,
@@ -42,7 +44,7 @@ class Document {
   void flip_vertical();
 
  private:
-  Image pixels_;
+  TiledImage pixels_;
 };
 
 }  // namespace ps

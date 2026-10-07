@@ -53,9 +53,18 @@ TEST_CASE("Canvas resize places content by anchor", "[document]") {
 
   SECTION("shrinking trims away from the anchor") {
     Document doc(make_test_pattern(16, 16));
-    const Image before = doc.pixels();
+    const Image before = doc.flatten();
     doc.resize_canvas(8, 8, Anchor::Right);
-    CHECK(doc.pixels() == before.cropped({8, 4, 8, 8}));
+    CHECK(doc.flatten() == before.cropped({8, 4, 8, 8}));
+  }
+
+  SECTION("growing a large canvas leaves the new area unallocated") {
+    const int tile = TiledImage::kTileSize;
+    Document doc(make_test_pattern(tile, tile));
+    doc.resize_canvas(3 * tile, 3 * tile, Anchor::Center, kBlack);
+    CHECK(doc.pixels().allocated_tiles() == 1);
+    CHECK(doc.pixels().pixel(tile, tile) == make_test_pattern(tile, tile).pixel(0, 0));
+    CHECK(doc.pixels().pixel(tile - 1, tile) == kBlack);
   }
 
   SECTION("rejects an empty canvas") {
@@ -66,12 +75,12 @@ TEST_CASE("Canvas resize places content by anchor", "[document]") {
 
 TEST_CASE("Document crop", "[document]") {
   Document doc(make_test_pattern(16, 16));
-  const Image before = doc.pixels();
+  const Image before = doc.flatten();
 
   doc.crop({12, 10, 100, 100});  // clipped to the canvas
   CHECK(doc.width() == 4);
   CHECK(doc.height() == 6);
-  CHECK(doc.pixels() == before.cropped({12, 10, 4, 6}));
+  CHECK(doc.flatten() == before.cropped({12, 10, 4, 6}));
 
   CHECK_THROWS_AS(doc.crop({50, 50, 4, 4}), std::invalid_argument);
   CHECK(doc.width() == 4);  // unchanged after a failed crop
@@ -79,17 +88,17 @@ TEST_CASE("Document crop", "[document]") {
 
 TEST_CASE("Document rotate and flip", "[document]") {
   Document doc(make_test_pattern(12, 8));
-  const Image before = doc.pixels();
+  const Image before = doc.flatten();
 
   doc.rotate(Rotation::CW90);
   CHECK(doc.width() == 8);
   CHECK(doc.height() == 12);
   doc.rotate(Rotation::CCW90);
-  CHECK(doc.pixels() == before);
+  CHECK(doc.flatten() == before);
 
   doc.flip_horizontal();
   doc.flip_vertical();
-  CHECK(doc.pixels() == before.rotated(Rotation::R180));
+  CHECK(doc.flatten() == before.rotated(Rotation::R180));
 }
 
 TEST_CASE("Canvas operations match golden images", "[document][golden]") {
@@ -101,13 +110,13 @@ TEST_CASE("Canvas operations match golden images", "[document][golden]") {
     Document doc(make_test_pattern(64, 48));
     doc.rotate(Rotation::CW90);
     doc.resize_canvas(80, 80, Anchor::Center, {40, 40, 40, 255});
-    CHECK(golden_mismatch(doc.pixels(), "canvas_rotate_grow") == "");
+    CHECK(golden_mismatch(doc.flatten(), "canvas_rotate_grow") == "");
   }
 
   SECTION("crop then flip") {
     Document doc(make_test_pattern(64, 48));
     doc.crop({0, 16, 40, 32});
     doc.flip_horizontal();
-    CHECK(golden_mismatch(doc.pixels(), "canvas_crop_flip") == "");
+    CHECK(golden_mismatch(doc.flatten(), "canvas_crop_flip") == "");
   }
 }
