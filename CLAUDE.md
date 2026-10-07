@@ -3,8 +3,8 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 2 (Layers + compositor)
-**Next step:** Build `Layer`, `LayerStack`, Normal blend (`blend.cpp`) and the tile-cached `Compositor`; move `Document` onto the stack.
+**Current milestone:** 3 (Blend modes + masks): not started
+**Next step:** Add the ten blend modes to `blend.cpp`, one golden each, then per-layer grayscale masks (needs a single-channel `TileGrid`). Open question carried over from milestone 2: the compositor is single-threaded; decide which milestone the thread pool belongs to.
 
 ## Build and test
 ```
@@ -35,11 +35,15 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
 ## Architecture (as built)
 - `core/` (`ps_core`, namespace `ps`): headless, no UI or GL includes. Everything testable lives here.
   - `Image`: owning flat RGBA8 buffer, straight alpha, top-left origin. Not document storage: it carries pixels in and out of a `TileGrid` (file I/O, texture upload, regions).
-  - `TileGrid`: document pixel storage. Sparse and unbounded (negative coordinates allowed), 64x64 tiles allocated on first write, copy-on-write through `shared_ptr`. Missing tiles read as transparent. `read(Rect)` and `write(Image, Point)` exchange flat regions. RGBA only so far; the 8-bit single-channel variant for masks and selections is milestone 3 work.
-  - `Document`: the open image plus canvas operations (resize with anchor, crop, rotate, flip). Holds a canvas size and one `TileGrid` until layers arrive; the ops rebuild the grid from a flat copy. *(These canvas ops are milestone 8 work done early; don't add more out-of-scope features.)*
+  - `TileGrid`: document pixel storage. Sparse and unbounded (negative coordinates allowed), 64x64 tiles allocated on first write, copy-on-write through `shared_ptr`. Missing tiles read as transparent. `read(Rect)` and `write(Image, Point)` exchange flat regions. Tile coordinates (`TileCoord`, `tile_index`, `tile_rect`) are public so the compositor can cache per tile. RGBA only so far; the 8-bit single-channel variant for masks and selections is milestone 3 work.
+  - `blend`: `BlendMode` (Normal only so far) and the pure pixel functions: `premultiply`, `unpremultiply`, `blend(mode, dst, src)` on premultiplied float RGBA.
+  - `Layer`: name, `TileGrid` pixels, offset, opacity (0..1), visible, blend. No mask yet.
+  - `LayerStack`: layers bottom to top; insert, remove, move.
+  - `Compositor`: flattens a stack per 64x64 document tile, bottom-up, and caches the result. It does not watch layers: callers `invalidate(Rect)` and only those tiles are redone. Single-threaded.
+  - `Document`: canvas size, `LayerStack` and its `Compositor`. Layers are read through `layers()` and changed only through `Document` methods (`add_layer`, `remove_layer`, `move_layer`, `set_layer_*`, `edit_layer_pixels(index, area)`), which invalidate the right tiles. `render(Rect)` and `flatten()` return the composite. These methods are what milestone 4's commands will call. Canvas operations (resize with anchor, crop, rotate, flip) apply to every layer; layers keep pixels that fall outside the canvas. *(These canvas ops are milestone 8 work done early; don't add more out-of-scope features.)*
   - `Viewport`: zoom/pan math, `screen = doc * zoom + offset`, zoom limited to 1:16 to 16:1.
   - `image_io`: load (PNG/JPEG/BMP/TGA/GIF) and PNG save through stb (compiled static; NanoGUI bundles its own copy). *(Overlaps milestone 9; it exists because the viewer and golden tests need it. JPEG export and the native format are still milestone 9.)*
-- `app/` (`mock_photoshop`): NanoGUI shell. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. It uploads the flattened canvas as one texture; per-tile upload waits for the compositor's dirty tiles in milestone 2. No editing logic here.
+- `app/` (`mock_photoshop`): NanoGUI shell. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. It uploads the flattened composite as one texture when a file is opened; nothing in the UI edits a document yet, so there is no per-tile re-upload. No editing logic here.
 - `tests/`: Catch2 v3. Golden PNGs in `tests/golden/`, compared exactly; mismatches are written to `build/tests/output/`.
 - `third_party/stb/`: vendored headers. Catch2 and NanoGUI come through FetchContent.
 
@@ -81,7 +85,7 @@ Document
 ## Compositor
 - Walks the stack bottom-up per dirty tile: pixels x mask x opacity, then blend.
 - Per-tile composite cache with dirty-rect invalidation. An edit invalidates only affected tiles.
-- Runs on a thread pool. UI shows a stale tile until the fresh one is ready.
+- Runs on a thread pool. UI shows a stale tile until the fresh one is ready. *(Not built: the compositor is synchronous and no milestone lists this.)*
 
 ## Undo
 - Before a command mutates tiles, snapshot affected tiles (copy-on-write makes this cheap).
@@ -106,7 +110,7 @@ Document
 
 ### Tier 1: must ship
 - [x] **1. Canvas (2h):** tiled storage, GL display, zoom/pan
-- [ ] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache
+- [x] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache *(core only; the thread pool from the Compositor section is not built)*
 - [ ] **3. Blend modes + masks (2h):** Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn; per-layer grayscale masks
 - [ ] **4. Commands + undo (2h):** command dispatch, tile-snapshot single-level undo/redo
 - [ ] **5. Selection + paint (4h):** marquee, lasso, magic wand, feather, invert; brush, eraser, paint bucket, eyedropper
@@ -153,4 +157,4 @@ Open a PNG or JPEG, add layers with blend modes and masks, make selections, pain
 - Eigen vs GLM
 
 ## Session log
-- Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Viewer confirmed working by eye; milestone 1 closed.
+- Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Viewer confirmed working by eye; milestone 1 closed. Milestone 2: `blend`, `Layer`, `LayerStack`, tile-cached `Compositor`, `Document` moved onto the stack; core is built with `-ffp-contract=off` so blend goldens are CPU-independent.
