@@ -3,8 +3,8 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 1 (Canvas, including tiled storage): code complete, viewer not yet checked by eye
-**Next step:** Run `./build/app/mock_photoshop <image>` and confirm it draws, pans (drag), zooms (scroll, Cmd +/-/0/1) and shows cursor coordinates. Fix anything off. The milestone list and the sections that followed "Architecture" are missing from this file and need to be pasted back in before milestone 2 starts.
+**Current milestone:** 1 (Canvas): tiled storage, display and zoom/pan are built and tested; the viewer has not been checked by eye
+**Next step:** Run `./build/app/mock_photoshop <image>` and confirm it draws, pans (drag), zooms (scroll, Cmd +/-/0/1) and shows cursor coordinates. If it looks right, tick milestone 1 and start milestone 2 (layers + compositor).
 
 ## Build and test
 ```
@@ -23,22 +23,134 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
 
 ## Stack
 - **Core:** C++17 or later, headless, no UI dependencies
-- **UI:** NanoGUI (OpenGL), kept thin
+- **UI:** NanoGUI (OpenGL), kept thin; pinned to a commit that compiles with the OpenGL backend on macOS
 - **Bindings:** nanobind (minimal test harness first)
-- **Image I/O:** stb_image / libpng / libjpeg-turbo
+- **Image I/O:** stb_image / stb_image_write (vendored in `third_party/stb/`), libpng / libjpeg-turbo if needed later
 - **Native format compression:** zstd or lz4
 - **Serialization:** nlohmann/json
-- **Math:** GLM or Eigen
+- **Math:** GLM or Eigen (undecided)
 - **Threading:** std::thread plus a simple pool
-- **Tests:** Catch2 or GoogleTest, plus golden images
+- **Tests:** Catch2 v3 plus golden images
 
-## Architecture
+## Architecture (as built)
 - `core/` (`ps_core`, namespace `ps`): headless, no UI or GL includes. Everything testable lives here.
-  - `Image`: owning flat RGBA8 buffer, straight alpha, top-left origin. Used for I/O, texture upload and regions read from a `TiledImage`.
-  - `TiledImage`: the document pixel store. 256 px tiles, solid-colour tiles hold no storage, copies share tiles until written (copy-on-write). `read`/`write` exchange flat `Image` regions with it.
-  - `Document`: the open image plus canvas operations (resize with anchor, crop, rotate, flip). Holds one `TiledImage` until layers arrive.
+  - `Image`: owning flat RGBA8 buffer, straight alpha, top-left origin. Not document storage: it carries pixels in and out of a `TileGrid` (file I/O, texture upload, regions).
+  - `TileGrid`: document pixel storage. Sparse and unbounded (negative coordinates allowed), 64x64 tiles allocated on first write, copy-on-write through `shared_ptr`. Missing tiles read as transparent. `read(Rect)` and `write(Image, Point)` exchange flat regions. RGBA only so far; the 8-bit single-channel variant for masks and selections is milestone 3 work.
+  - `Document`: the open image plus canvas operations (resize with anchor, crop, rotate, flip). Holds a canvas size and one `TileGrid` until layers arrive; the ops rebuild the grid from a flat copy. *(These canvas ops are milestone 8 work done early; don't add more out-of-scope features.)*
   - `Viewport`: zoom/pan math, `screen = doc * zoom + offset`, zoom limited to 1:16 to 16:1.
-  - `image_io`: load and save through stb (compiled static, NanoGUI bundles its own copy).
-- `app/` (`mock_photoshop`): NanoGUI shell. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. No editing logic here.
+  - `image_io`: load (PNG/JPEG/BMP/TGA/GIF) and PNG save through stb (compiled static; NanoGUI bundles its own copy). *(Overlaps milestone 9; it exists because the viewer and golden tests need it. JPEG export and the native format are still milestone 9.)*
+- `app/` (`mock_photoshop`): NanoGUI shell. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. It uploads the flattened canvas as one texture; per-tile upload waits for the compositor's dirty tiles in milestone 2. No editing logic here.
 - `tests/`: Catch2 v3. Golden PNGs in `tests/golden/`, compared exactly; mismatches are written to `build/tests/output/`.
-- `third_party/stb/`: vendored headers. Catch2 and NanoGUI come through FetchContent; NanoGUI is pinned to a commit because later ones don't compile with the OpenGL backend on macOS.
+- `third_party/stb/`: vendored headers. Catch2 and NanoGUI come through FetchContent.
+
+## Layering
+```
+UI (NanoGUI): widgets, palettes, canvas view
+Command layer: tools, menus (all edits go through here)
+Core (C++): document, layers, tiles, compositor, selection, filters, undo
+Bindings (nanobind): Python scripting and tests
+```
+
+### Hard rules
+1. **Core is headless.** No UI includes in `core/`.
+2. **Every edit is a Command** (name, parameters, execute, undo). Tools and menus never mutate document state directly.
+3. **UI only reads document state and issues commands.**
+4. **All blend modes live in one file** (`blend.cpp`) as pure functions on pixel pairs, each with a golden test.
+5. **No feature work without a test** (unit, golden image, or round-trip).
+6. **Do not implement features outside the current milestone.**
+
+## Data model (target)
+```
+Document
+ ├─ size, mode (RGB 8-bit only), resolution
+ ├─ LayerStack (ordered bottom to top)
+ │    └─ RasterLayer { TileGrid pixels, mask?, opacity, blend, visible, offset }
+ └─ Selection { 8-bit mask as TileGrid }
+```
+
+- **Tiles:** 64x64, lazily allocated, copy-on-write via shared pointers. Empty tiles cost nothing.
+- **Layers** are sparse maps from tile coordinate to tile, with independent bounds. Layers may extend beyond canvas bounds.
+- **Masks and selections** reuse the same 8-bit tile grid type, so feather, invert, and painting on masks are ordinary operations.
+
+## Pixel format (decided)
+- **Storage:** 8-bit straight (non-premultiplied) RGBA.
+- **Compositor math:** premultiplied internally, converted at tile boundaries.
+- **Color space:** gamma-encoded values used directly (no linear-light blending), matching the era.
+- Do not change this without updating every blend test.
+
+## Compositor
+- Walks the stack bottom-up per dirty tile: pixels x mask x opacity, then blend.
+- Per-tile composite cache with dirty-rect invalidation. An edit invalidates only affected tiles.
+- Runs on a thread pool. UI shows a stale tile until the fresh one is ready.
+
+## Undo
+- Before a command mutates tiles, snapshot affected tiles (copy-on-write makes this cheap).
+- Undo record: map of `(layer, tile coord) -> old tile`, plus non-pixel state (layer list, properties).
+- **Ship single-level undo/redo toggle (3.0 behavior).** Keep the design able to grow into a history stack.
+
+## Paint engine
+- Dab-based stamping along strokes: spacing, size, hardness, opacity, flow.
+- Strokes accumulate in a temporary buffer, then commit through opacity and blend, so overlapping dabs don't double-apply opacity.
+- Each tool is a state machine (`press / drag / release / cancel`) that emits one command on release.
+
+## Adjustments and filters
+- **Adjustments:** LUT-based where possible (levels, curves, brightness/contrast, invert). Hue/saturation is per-pixel. Applied as direct edits, with preview.
+- **Filters:** take a source region plus a halo for kernel radius; cancellable with progress callback. Preview on a downsampled or visible-region copy first.
+- **Transform:** 3x3 matrix, inverse mapping, nearest/bilinear while dragging, bicubic on commit.
+
+## File formats
+- **Native:** zip containing `manifest.json` (layers, properties, versions) plus per-layer tile blobs (zstd/lz4). Include a format version number from the first write.
+- **Import/export:** PNG and JPEG.
+
+## Scope
+
+### Tier 1: must ship
+- [ ] **1. Canvas (2h):** tiled storage, GL display, zoom/pan *(all three built and tested; untick only because the viewer hasn't been checked by eye)*
+- [ ] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache
+- [ ] **3. Blend modes + masks (2h):** Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn; per-layer grayscale masks
+- [ ] **4. Commands + undo (2h):** command dispatch, tile-snapshot single-level undo/redo
+- [ ] **5. Selection + paint (4h):** marquee, lasso, magic wand, feather, invert; brush, eraser, paint bucket, eyedropper
+- [ ] **6. Adjustments (2h):** levels, curves, hue/saturation, brightness/contrast, invert
+- [ ] **7. Filters (1.5h):** Gaussian blur, unsharp mask, noise, motion blur, optionally emboss/find edges
+- [ ] **8. Transform (2.5h):** crop, canvas/image size, scale/rotate with bicubic resampling *(basic canvas ops already exist)*
+- [ ] **9. File I/O (2h):** native save/load, PNG/JPEG import/export
+- [ ] **10. Minimal UI (2h):** toolbox, tool options bar, layers palette (thumbnails, eye toggle, drag-reorder)
+
+### Tier 2: only if ahead of schedule
+- Adjustment layers (reuse milestone 6 code)
+- Skew, perspective, distort
+- Alpha channels (save/load selection)
+- Clone stamp, smudge, dodge/burn, gradient
+- HSL blend modes (Hue, Saturation, Color, Luminosity)
+- Grayscale mode
+- Python bindings beyond a minimal test harness
+
+### Tier 3: cut for now
+- Paths and pen tool
+- Actions recorder/player
+- Rulers, guides, grid, navigator
+- Multi-step history
+- PSD import/export
+- CMYK, 16-bit, ICC, tablet pressure, layer effects, text
+
+## Testing
+- Golden-image tests for every blend mode, filter, and adjustment.
+- Property tests: undo then redo yields identical tiles; save then load round-trips.
+- Headless integration tests drive the same Commands as the UI (C++ or Python).
+- Full suite must pass before every commit.
+
+## Conventions
+- One concept per file; keep headers small.
+- Commands are fully parameterized and serializable (keeps Actions possible later).
+- No raw owning pointers; use `shared_ptr` for tiles and `unique_ptr` elsewhere.
+- Commit messages: `m<N>: <what changed>` (for example `m3: add multiply blend + golden test`).
+
+## Definition of done
+Open a PNG or JPEG, add layers with blend modes and masks, make selections, paint, apply adjustments and filters, transform, undo the last action, and save and reload in the native format.
+
+## Open decisions
+- Native format name and extension
+- Eigen vs GLM
+
+## Session log
+- Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Next: eyeball viewer, then milestone 2.

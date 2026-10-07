@@ -98,7 +98,8 @@ class App : public nanogui::Screen {
                           document_.height());
     const int x = static_cast<int>(std::floor(canvas_->cursor().x));
     const int y = static_cast<int>(std::floor(canvas_->cursor().y));
-    if (canvas_->hovering() && document_.pixels().contains(x, y)) {
+    if (canvas_->hovering() && x >= 0 && y >= 0 && x < document_.width() &&
+        y < document_.height()) {
       std::snprintf(text + n, sizeof(text) - n, "    X: %d  Y: %d", x, y);
     }
     status_->set_caption(text);

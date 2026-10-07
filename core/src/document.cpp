@@ -1,7 +1,6 @@
 #include "ps/document.h"
 
 #include <stdexcept>
-#include <utility>
 
 namespace ps {
 
@@ -20,14 +19,22 @@ int anchor_offset(int old_size, int new_size, int position) {
 
 }  // namespace
 
-Document::Document(int width, int height, Color background) {
+Document::Document(int width, int height, Color background)
+    : width_(width), height_(height) {
   require_size(width, height);
-  pixels_ = TiledImage(width, height, background);
+  pixels_.fill(bounds(), background);
 }
 
 Document::Document(const Image& pixels) {
   require_size(pixels.width(), pixels.height());
-  pixels_ = TiledImage(pixels);
+  reset(pixels);
+}
+
+void Document::reset(const Image& image) {
+  width_ = image.width();
+  height_ = image.height();
+  pixels_.clear();
+  pixels_.write(image, {0, 0});
 }
 
 void Document::resize_canvas(int width, int height, Anchor anchor, Color fill) {
@@ -36,29 +43,31 @@ void Document::resize_canvas(int width, int height, Anchor anchor, Color fill) {
   const int row = static_cast<int>(anchor) / 3;
   const int dx = anchor_offset(this->width(), width, column);
   const int dy = anchor_offset(this->height(), height, row);
-  // Only the surviving pixels are copied, so the new area stays unallocated.
   const Rect kept = Rect{-dx, -dy, width, height}.intersect(bounds());
-  TiledImage resized(width, height, fill);
-  if (!kept.empty()) resized.write(pixels_.read(kept), {kept.x + dx, kept.y + dy});
-  pixels_ = std::move(resized);
+  const Image content = pixels_.read(kept);
+  width_ = width;
+  height_ = height;
+  pixels_.clear();
+  pixels_.fill(bounds(), fill);
+  pixels_.write(content, {kept.x + dx, kept.y + dy});
 }
 
 void Document::crop(Rect r) {
   r = r.intersect(bounds());
   if (r.empty()) throw std::invalid_argument("Crop rectangle misses the canvas");
-  pixels_ = TiledImage(pixels_.read(r));
+  reset(pixels_.read(r));
 }
 
 void Document::rotate(Rotation rotation) {
-  pixels_ = TiledImage(flatten().rotated(rotation));
+  reset(flatten().rotated(rotation));
 }
 
 void Document::flip_horizontal() {
-  pixels_ = TiledImage(flatten().flipped_horizontal());
+  reset(flatten().flipped_horizontal());
 }
 
 void Document::flip_vertical() {
-  pixels_ = TiledImage(flatten().flipped_vertical());
+  reset(flatten().flipped_vertical());
 }
 
 }  // namespace ps

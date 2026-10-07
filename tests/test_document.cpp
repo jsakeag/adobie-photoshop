@@ -12,6 +12,14 @@ TEST_CASE("Document construction", "[document]") {
   CHECK(doc.width() == 8);
   CHECK(doc.height() == 6);
   CHECK(doc.pixels().pixel(7, 5) == kWhite);
+  CHECK(doc.pixels().pixel(8, 5) == kTransparent);  // nothing beyond the canvas
+  CHECK(doc.flatten() == Image(8, 6, kWhite));
+
+  const Image pattern = make_test_pattern(150, 70);  // spans several tiles
+  const Document loaded(pattern);
+  CHECK(loaded.width() == 150);
+  CHECK(loaded.height() == 70);
+  CHECK(loaded.flatten() == pattern);
 
   CHECK_THROWS_AS(Document(0, 5), std::invalid_argument);
   CHECK_THROWS_AS(Document(Image()), std::invalid_argument);
@@ -56,15 +64,6 @@ TEST_CASE("Canvas resize places content by anchor", "[document]") {
     const Image before = doc.flatten();
     doc.resize_canvas(8, 8, Anchor::Right);
     CHECK(doc.flatten() == before.cropped({8, 4, 8, 8}));
-  }
-
-  SECTION("growing a large canvas leaves the new area unallocated") {
-    const int tile = TiledImage::kTileSize;
-    Document doc(make_test_pattern(tile, tile));
-    doc.resize_canvas(3 * tile, 3 * tile, Anchor::Center, kBlack);
-    CHECK(doc.pixels().allocated_tiles() == 1);
-    CHECK(doc.pixels().pixel(tile, tile) == make_test_pattern(tile, tile).pixel(0, 0));
-    CHECK(doc.pixels().pixel(tile - 1, tile) == kBlack);
   }
 
   SECTION("rejects an empty canvas") {

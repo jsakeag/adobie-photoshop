@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ps/image.h"
-#include "ps/tiled_image.h"
+#include "ps/tile_grid.h"
 
 namespace ps {
 
@@ -18,19 +18,20 @@ enum class Anchor {
   BottomRight,
 };
 
-// An open image. Holds a single tiled pixel store until layers arrive.
+// An open image: a canvas size plus one TileGrid of pixels until layers arrive.
 class Document {
  public:
   Document(int width, int height, Color background = kWhite);
   explicit Document(const Image& pixels);
 
-  int width() const { return pixels_.width(); }
-  int height() const { return pixels_.height(); }
-  Rect bounds() const { return pixels_.bounds(); }
+  int width() const { return width_; }
+  int height() const { return height_; }
+  Rect bounds() const { return {0, 0, width_, height_}; }
 
-  const TiledImage& pixels() const { return pixels_; }
-  TiledImage& pixels() { return pixels_; }
-  Image flatten() const { return pixels_.flatten(); }
+  const TileGrid& pixels() const { return pixels_; }
+  TileGrid& pixels() { return pixels_; }
+  // The canvas area as one flat image.
+  Image flatten() const { return pixels_.read(bounds()); }
 
   // Canvas Size: grows or trims around the anchor, new area gets `fill`.
   void resize_canvas(int width, int height, Anchor anchor = Anchor::Center,
@@ -44,7 +45,12 @@ class Document {
   void flip_vertical();
 
  private:
-  TiledImage pixels_;
+  // Replaces the canvas with `image`.
+  void reset(const Image& image);
+
+  int width_ = 0;
+  int height_ = 0;
+  TileGrid pixels_;
 };
 
 }  // namespace ps
