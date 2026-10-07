@@ -3,8 +3,8 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 1 (Canvas): tiled storage, display and zoom/pan are built and tested; the viewer has not been checked by eye
-**Next step:** Run `./build/app/mock_photoshop <image>` and confirm it draws, pans (drag), zooms (scroll, Cmd +/-/0/1) and shows cursor coordinates. If it looks right, tick milestone 1 and start milestone 2 (layers + compositor).
+**Current milestone:** 2 (Layers + compositor)
+**Next step:** Build `Layer`, `LayerStack`, Normal blend (`blend.cpp`) and the tile-cached `Compositor`; move `Document` onto the stack.
 
 ## Build and test
 ```
@@ -105,7 +105,7 @@ Document
 ## Scope
 
 ### Tier 1: must ship
-- [ ] **1. Canvas (2h):** tiled storage, GL display, zoom/pan *(all three built and tested; untick only because the viewer hasn't been checked by eye)*
+- [x] **1. Canvas (2h):** tiled storage, GL display, zoom/pan
 - [ ] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache
 - [ ] **3. Blend modes + masks (2h):** Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn; per-layer grayscale masks
 - [ ] **4. Commands + undo (2h):** command dispatch, tile-snapshot single-level undo/redo
@@ -153,4 +153,4 @@ Open a PNG or JPEG, add layers with blend modes and masks, make selections, pain
 - Eigen vs GLM
 
 ## Session log
-- Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Next: eyeball viewer, then milestone 2.
+- Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Viewer confirmed working by eye; milestone 1 closed.
