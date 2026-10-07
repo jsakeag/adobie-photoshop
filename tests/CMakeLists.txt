@@ -10,9 +10,13 @@ FetchContent_MakeAvailable(Catch2)
 
 add_executable(ps_tests
   golden.cpp
+  test_blend.cpp
+  test_compositor.cpp
   test_document.cpp
+  test_document_layers.cpp
   test_image.cpp
   test_image_io.cpp
+  test_layer_stack.cpp
   test_tile_grid.cpp
   test_viewport.cpp
 )

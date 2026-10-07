@@ -11,8 +11,8 @@ TEST_CASE("Document construction", "[document]") {
   const Document doc(8, 6);
   CHECK(doc.width() == 8);
   CHECK(doc.height() == 6);
-  CHECK(doc.pixels().pixel(7, 5) == kWhite);
-  CHECK(doc.pixels().pixel(8, 5) == kTransparent);  // nothing beyond the canvas
+  CHECK(doc.flatten().pixel(7, 5) == kWhite);
+  CHECK(doc.render({8, 5, 1, 1}).pixel(0, 0) == kTransparent);  // off canvas
   CHECK(doc.flatten() == Image(8, 6, kWhite));
 
   const Image pattern = make_test_pattern(150, 70);  // spans several tiles
@@ -33,30 +33,30 @@ TEST_CASE("Canvas resize places content by anchor", "[document]") {
     doc.resize_canvas(6, 4, Anchor::TopLeft, kBlack);
     CHECK(doc.width() == 6);
     CHECK(doc.height() == 4);
-    CHECK(doc.pixels().pixel(0, 0) == red);
-    CHECK(doc.pixels().pixel(1, 1) == red);
-    CHECK(doc.pixels().pixel(2, 1) == kBlack);
-    CHECK(doc.pixels().pixel(1, 2) == kBlack);
+    CHECK(doc.flatten().pixel(0, 0) == red);
+    CHECK(doc.flatten().pixel(1, 1) == red);
+    CHECK(doc.flatten().pixel(2, 1) == kBlack);
+    CHECK(doc.flatten().pixel(1, 2) == kBlack);
   }
 
   SECTION("growing from the centre pads evenly") {
     Document doc(2, 2, red);
     doc.resize_canvas(6, 4, Anchor::Center, kBlack);
-    CHECK(doc.pixels().pixel(1, 1) == kBlack);
-    CHECK(doc.pixels().pixel(2, 1) == red);
-    CHECK(doc.pixels().pixel(3, 2) == red);
-    CHECK(doc.pixels().pixel(4, 2) == kBlack);
-    CHECK(doc.pixels().pixel(2, 0) == kBlack);
-    CHECK(doc.pixels().pixel(2, 3) == kBlack);
+    CHECK(doc.flatten().pixel(1, 1) == kBlack);
+    CHECK(doc.flatten().pixel(2, 1) == red);
+    CHECK(doc.flatten().pixel(3, 2) == red);
+    CHECK(doc.flatten().pixel(4, 2) == kBlack);
+    CHECK(doc.flatten().pixel(2, 0) == kBlack);
+    CHECK(doc.flatten().pixel(2, 3) == kBlack);
   }
 
   SECTION("growing from the bottom-right pushes content to that corner") {
     Document doc(2, 2, red);
     doc.resize_canvas(6, 4, Anchor::BottomRight, kBlack);
-    CHECK(doc.pixels().pixel(4, 2) == red);
-    CHECK(doc.pixels().pixel(5, 3) == red);
-    CHECK(doc.pixels().pixel(3, 3) == kBlack);
-    CHECK(doc.pixels().pixel(5, 1) == kBlack);
+    CHECK(doc.flatten().pixel(4, 2) == red);
+    CHECK(doc.flatten().pixel(5, 3) == red);
+    CHECK(doc.flatten().pixel(3, 3) == kBlack);
+    CHECK(doc.flatten().pixel(5, 1) == kBlack);
   }
 
   SECTION("shrinking trims away from the anchor") {

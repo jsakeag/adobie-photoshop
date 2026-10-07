@@ -11,16 +11,13 @@ namespace {
 constexpr int kTile = TileGrid::kTileSize;
 constexpr int kChannels = Image::kChannels;
 
-// Tile index along one axis; rounds toward negative infinity.
-int tile_index(int v) { return v >= 0 ? v / kTile : -((-v - 1) / kTile) - 1; }
-
 // Byte offset of grid pixel (x, y) inside tile (tx, ty).
 std::size_t tile_offset(int x, int y, int tx, int ty) {
   return (static_cast<std::size_t>(y - ty * kTile) * kTile + (x - tx * kTile)) *
          kChannels;
 }
 
-Rect tile_rect(int tx, int ty) { return {tx * kTile, ty * kTile, kTile, kTile}; }
+Rect tile_rect(int tx, int ty) { return tile_rect(TileCoord{tx, ty}); }
 
 void fill_pixels(std::uint8_t* p, std::size_t count, Color c) {
   const std::uint8_t px[kChannels] = {c.r, c.g, c.b, c.a};
@@ -37,12 +34,12 @@ bool all_zero(const TileT& tile) {
 
 }  // namespace
 
-const TileGrid::Tile* TileGrid::find(Coord c) const {
+const TileGrid::Tile* TileGrid::find(TileCoord c) const {
   const auto it = tiles_.find(c);
   return it == tiles_.end() ? nullptr : it->second.get();
 }
 
-TileGrid::Tile& TileGrid::writable(Coord c) {
+TileGrid::Tile& TileGrid::writable(TileCoord c) {
   std::shared_ptr<Tile>& tile = tiles_[c];
   if (!tile) {
     tile = std::make_shared<Tile>();  // value-initialised: transparent
@@ -71,6 +68,28 @@ Rect TileGrid::bounds() const {
     y1 = std::max(y1, entry.first.y);
   }
   return {x0 * kTile, y0 * kTile, (x1 - x0 + 1) * kTile, (y1 - y0 + 1) * kTile};
+}
+
+bool TileGrid::any_tile_in(Rect r) const {
+  if (r.empty() || tiles_.empty()) return false;
+  const int tx0 = tile_index(r.x), tx1 = tile_index(r.right() - 1);
+  const int ty0 = tile_index(r.y), ty1 = tile_index(r.bottom() - 1);
+  // Walk whichever is smaller: the tiles under r or the allocated tiles.
+  const long long covered =
+      static_cast<long long>(tx1 - tx0 + 1) * (ty1 - ty0 + 1);
+  if (covered <= static_cast<long long>(tiles_.size())) {
+    for (int ty = ty0; ty <= ty1; ++ty) {
+      for (int tx = tx0; tx <= tx1; ++tx) {
+        if (find({tx, ty})) return true;
+      }
+    }
+    return false;
+  }
+  for (const auto& entry : tiles_) {
+    const TileCoord c = entry.first;
+    if (c.x >= tx0 && c.x <= tx1 && c.y >= ty0 && c.y <= ty1) return true;
+  }
+  return false;
 }
 
 Color TileGrid::pixel(int x, int y) const {

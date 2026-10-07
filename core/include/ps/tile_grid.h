@@ -12,6 +12,33 @@
 
 namespace ps {
 
+inline constexpr int kTileSize = 64;
+
+// Position of a tile in tile units; tile (0, 0) covers pixels [0, 64).
+struct TileCoord {
+  int x = 0;
+  int y = 0;
+  bool operator==(const TileCoord& o) const { return x == o.x && y == o.y; }
+  bool operator!=(const TileCoord& o) const { return !(*this == o); }
+};
+
+struct TileCoordHash {
+  std::size_t operator()(const TileCoord& c) const {
+    return std::hash<std::uint64_t>()(
+        (static_cast<std::uint64_t>(static_cast<std::uint32_t>(c.x)) << 32) |
+        static_cast<std::uint32_t>(c.y));
+  }
+};
+
+// Tile index along one axis; rounds toward negative infinity.
+inline int tile_index(int v) {
+  return v >= 0 ? v / kTileSize : -((-v - 1) / kTileSize) - 1;
+}
+
+inline Rect tile_rect(TileCoord c) {
+  return {c.x * kTileSize, c.y * kTileSize, kTileSize, kTileSize};
+}
+
 // Sparse, unbounded RGBA8 pixel storage made of 64x64 tiles.
 //
 // Tiles are allocated on first write; anywhere without a tile reads as
@@ -19,7 +46,7 @@ namespace ps {
 // tile (copy-on-write), so snapshots are cheap.
 class TileGrid {
  public:
-  static constexpr int kTileSize = 64;
+  static constexpr int kTileSize = ps::kTileSize;
 
   bool empty() const { return tiles_.empty(); }
   std::size_t tile_count() const { return tiles_.size(); }
@@ -27,6 +54,8 @@ class TileGrid {
   std::size_t shared_tiles(const TileGrid& other) const;
   // Smallest tile-aligned rectangle covering every allocated tile.
   Rect bounds() const;
+  // Whether any allocated tile overlaps r.
+  bool any_tile_in(Rect r) const;
 
   // Any coordinate is valid, including negative ones.
   Color pixel(int x, int y) const;
@@ -45,26 +74,15 @@ class TileGrid {
   bool operator!=(const TileGrid& o) const { return !(*this == o); }
 
  private:
-  struct Coord {
-    int x = 0;
-    int y = 0;
-    bool operator==(const Coord& o) const { return x == o.x && y == o.y; }
-  };
-  struct CoordHash {
-    std::size_t operator()(const Coord& c) const {
-      return std::hash<std::uint64_t>()(
-          (static_cast<std::uint64_t>(static_cast<std::uint32_t>(c.x)) << 32) |
-          static_cast<std::uint32_t>(c.y));
-    }
-  };
   using Tile =
       std::array<std::uint8_t, kTileSize * kTileSize * Image::kChannels>;
 
-  const Tile* find(Coord c) const;
+  const Tile* find(TileCoord c) const;
   // Returns a tile this grid owns alone, allocating or cloning as needed.
-  Tile& writable(Coord c);
+  Tile& writable(TileCoord c);
 
-  std::unordered_map<Coord, std::shared_ptr<Tile>, CoordHash> tiles_;
+  std::unordered_map<TileCoord, std::shared_ptr<Tile>, TileCoordHash>
+      tiles_;
 };
 
 }  // namespace ps
