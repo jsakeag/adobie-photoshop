@@ -3,8 +3,8 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 5 (Selection + paint): not started
-**Next step:** Add `Selection` to `Document` as a `MaskGrid` (marquee, lasso, magic wand, feather, invert), each as a command; then the dab-based paint engine and the brush, eraser, paint bucket and eyedropper tools. 4h is tight for this list: decide what to cut first if it runs over.
+**Current milestone:** 4b (GUI catch-up): not started. Milestones 1-4 have core code but only the viewer has a UI; bind them before starting milestone 5.
+**Next step:** Build the GUI for what exists: Edit menu or buttons for undo/redo (Cmd+Z toggles, single-level), a layers panel (list top first, eye toggle, select, opacity slider, blend mode picker, new/delete/reorder, add or remove mask, open an image as a new layer), each action a command through the `Editor`. Then milestone 5. Milestone 5 plan, once it starts: add `Selection` to `Document` as a `MaskGrid` (marquee, lasso, magic wand, feather, invert), each as a command; then the dab-based paint engine and the brush, eraser, paint bucket and eyedropper tools. 4h is tight for this list: decide what to cut first if it runs over.
 
 ## Build and test
 ```
@@ -16,8 +16,8 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
 
 ## Session protocol
 1. Start: read this file, run the full test suite, confirm it's green.
-2. Work on the current milestone only. Do not start the next one early.
-3. End: run tests, update README.md (status line, and usage for anything user-facing that changed; compile any code sample you touch), commit, update "Current milestone" and "Next step" above.
+2. Work on the current milestone only. Do not start the next one early. **Every milestone includes its GUI binding**: a feature is not done until it can be used from the app, through a command, and the README says how.
+3. End: run tests, run the app once (the GUI cannot be screenshotted in this environment, so say plainly what was and wasn't checked), update README.md (status line, and usage for anything user-facing that changed; compile any code sample you touch), commit, update "Current milestone" and "Next step" above.
 4. If a milestone runs over its estimate by 50%, cut scope within it. Do not borrow time from the next one.
 5. Keep ~2 hours of buffer. Do not spend it on features.
 
@@ -49,6 +49,7 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
   - `Viewport`: zoom/pan math, `screen = doc * zoom + offset`, zoom limited to 1:16 to 16:1.
   - `image_io`: load (PNG/JPEG/BMP/TGA/GIF) and PNG save through stb (compiled static; NanoGUI bundles its own copy). *(Overlaps milestone 9; it exists because the viewer and golden tests need it. JPEG export and the native format are still milestone 9.)*
 - `app/` (`mock_photoshop`): NanoGUI shell. It holds an `Editor`, not a bare `Document`. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. It uploads the flattened composite as one texture when a file is opened; nothing in the UI edits a document yet, so there is no per-tile re-upload. No editing logic here.
+  - **The GUI exists and grows with the core.** Today it is a viewer: open (Cmd+O or drop), pan, zoom, cursor coordinates. From milestone 4b on, each milestone adds its controls (see Scope). Widgets only read `editor.document()` and issue commands; anything with logic goes in `core/` so it can be tested headless.
 - `tests/`: Catch2 v3. Golden PNGs in `tests/golden/`, compared exactly; mismatches are written to `build/tests/output/`.
 - `third_party/stb/`: vendored headers. Catch2 and NanoGUI come through FetchContent.
 
@@ -67,6 +68,7 @@ Bindings (nanobind): Python scripting and tests
 4. **All blend modes live in one file** (`blend.cpp`) as pure functions on pixel pairs, each with a golden test.
 5. **No feature work without a test** (unit, golden image, or round-trip).
 6. **Do not implement features outside the current milestone.**
+7. **A feature without a GUI binding is unfinished.** Core-only work needs a stated reason (for example, a pure math helper).
 
 ## Data model (target)
 ```
@@ -120,12 +122,13 @@ Document
 - [x] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache *(core only; thread pool deferred, see Compositor)*
 - [x] **3. Blend modes + masks (2h):** Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn; per-layer grayscale masks
 - [x] **4. Commands + undo (2h):** command dispatch, tile-snapshot single-level undo/redo
+- [ ] **4b. GUI catch-up (1.5h):** undo/redo, layers panel (visibility, select, opacity, blend mode, new/delete/reorder, mask add/remove, open as layer). Taken from milestone 10's time; each later milestone budgets its own GUI work inside its estimate.
 - [ ] **5. Selection + paint (4h):** marquee, lasso, magic wand, feather, invert; brush, eraser, paint bucket, eyedropper
 - [ ] **6. Adjustments (2h):** levels, curves, hue/saturation, brightness/contrast, invert
 - [ ] **7. Filters (1.5h):** Gaussian blur, unsharp mask, noise, motion blur, optionally emboss/find edges
 - [ ] **8. Transform (2.5h):** crop, canvas/image size, scale/rotate with bicubic resampling *(basic canvas ops already exist)*
 - [ ] **9. File I/O (2h):** native save/load, PNG/JPEG import/export
-- [ ] **10. Minimal UI (2h):** toolbox, tool options bar, layers palette (thumbnails, eye toggle, drag-reorder)
+- [ ] **10. Polish the UI (1h):** *(reduced: GUI now built per milestone)* layer thumbnails, drag-reorder, shortcuts, layout. The panels and tools themselves arrive with milestones 4b-9.
 
 ### Tier 2: only if ahead of schedule
 - Adjustment layers (reuse milestone 6 code)
@@ -166,3 +169,4 @@ Open a PNG or JPEG, add layers with blend modes and masks, make selections, pain
 ## Session log
 - Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Viewer confirmed working by eye; milestone 1 closed. Milestone 2: `blend`, `Layer`, `LayerStack`, tile-cached `Compositor`, `Document` moved onto the stack; core is built with `-ffp-contract=off` so blend goldens are CPU-independent.
 - Session 2 (2026-10-08): README added. Milestone 3: ten blend modes with value tests and a golden each; `TileStore<N>` extracted so `MaskGrid` shares the tile code; layer masks in `Layer`, `Compositor` and `Document`. Thread pool deferred. Milestone 4: `Command` base with snapshot undo, concrete commands for every `Document` mutator, `Editor` with single-level undo/redo, `Document::snapshot`/`restore`; the app now holds an `Editor`.
+- Session 2 decision (2026-10-08): GUI pulled forward. Milestone 10 shrinks to polish; milestone 4b binds milestones 2-4 to the GUI; later milestones include their own controls. No GUI code written yet.
