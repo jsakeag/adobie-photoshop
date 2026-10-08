@@ -23,6 +23,14 @@ enum class Anchor {
   BottomRight,
 };
 
+// Everything a Document holds, as a value. Copies share tiles with the
+// document, so keeping one costs only the tiles that later change.
+struct DocumentState {
+  int width = 0;
+  int height = 0;
+  LayerStack layers;
+};
+
 // An open image: a canvas size and a stack of layers.
 //
 // Layers are changed only through the methods here, so the composite cache
@@ -40,6 +48,10 @@ class Document {
   Rect bounds() const { return {0, 0, width_, height_}; }
 
   const LayerStack& layers() const { return layers_; }
+
+  DocumentState snapshot() const { return {width_, height_, layers_}; }
+  // Puts back a snapshot, recompositing only the tiles that differ.
+  void restore(const DocumentState& state);
 
   // Inserts below the layer currently at `index`; layers().size() adds on top.
   void add_layer(std::size_t index, Layer layer);

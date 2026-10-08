@@ -11,9 +11,12 @@ FetchContent_MakeAvailable(Catch2)
 add_executable(ps_tests
   golden.cpp
   test_blend.cpp
+  test_commands.cpp
   test_compositor.cpp
   test_document.cpp
   test_document_layers.cpp
+  test_document_state.cpp
+  test_editor.cpp
   test_image.cpp
   test_image_io.cpp
   test_layer_mask.cpp

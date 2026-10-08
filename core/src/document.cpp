@@ -43,6 +43,16 @@ std::vector<std::uint8_t> image_as_mask(const Image& image) {
   return values;
 }
 
+// Whether two layers differ only in pixel and mask content, if at all.
+bool same_placement(const Layer& a, const Layer& b) {
+  if (a.offset.x != b.offset.x || a.offset.y != b.offset.y ||
+      a.opacity != b.opacity || a.visible != b.visible || a.blend != b.blend ||
+      a.mask.has_value() != b.mask.has_value()) {
+    return false;
+  }
+  return !a.mask || a.mask->background() == b.mask->background();
+}
+
 }  // namespace
 
 Document::Document(int width, int height, Color background)
@@ -61,6 +71,34 @@ Document::Document(const Image& pixels)
   layer.name = "Background";
   layer.pixels.write(pixels, {0, 0});
   layers_.insert(0, std::move(layer));
+}
+
+void Document::restore(const DocumentState& state) {
+  require_size(state.width, state.height);
+  if (state.width != width_ || state.height != height_ ||
+      state.layers.size() != layers_.size()) {
+    compositor_.invalidate_all();
+  } else {
+    for (std::size_t i = 0; i < layers_.size(); ++i) {
+      const Layer& now = layers_.at(i);
+      const Layer& then = state.layers.at(i);
+      if (!same_placement(now, then)) {
+        compositor_.invalidate(now.bounds());
+        compositor_.invalidate(then.bounds());
+        continue;
+      }
+      for (TileCoord c : now.pixels.changed_tiles(then.pixels)) {
+        compositor_.invalidate(offset_by(tile_rect(c), now.offset));
+      }
+      if (!now.mask) continue;
+      for (TileCoord c : now.mask->changed_tiles(*then.mask)) {
+        compositor_.invalidate(offset_by(tile_rect(c), now.offset));
+      }
+    }
+  }
+  width_ = state.width;
+  height_ = state.height;
+  layers_ = state.layers;
 }
 
 void Document::add_layer(std::size_t index, Layer layer) {

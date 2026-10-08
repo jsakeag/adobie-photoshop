@@ -3,8 +3,8 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 4 (Commands + undo): not started
-**Next step:** Design the `Command` interface (name, parameters, execute, undo) and a dispatcher on top of the `Document` mutators, then tile-snapshot single-level undo/redo with the undo-then-redo property test.
+**Current milestone:** 5 (Selection + paint): not started
+**Next step:** Add `Selection` to `Document` as a `MaskGrid` (marquee, lasso, magic wand, feather, invert), each as a command; then the dab-based paint engine and the brush, eraser, paint bucket and eyedropper tools. 4h is tight for this list: decide what to cut first if it runs over.
 
 ## Build and test
 ```
@@ -42,10 +42,13 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
   - `Layer`: name, `TileGrid` pixels, offset, opacity (0..1), visible, blend, optional `MaskGrid` mask in layer coordinates (it moves with the layer).
   - `LayerStack`: layers bottom to top; insert, remove, move.
   - `Compositor`: flattens a stack per 64x64 document tile, bottom-up (pixels x mask x opacity, then blend), and caches the result. It does not watch layers: callers `invalidate(Rect)` and only those tiles are redone. Single-threaded.
-  - `Document`: canvas size, `LayerStack` and its `Compositor`. Layers are read through `layers()` and changed only through `Document` methods (`add_layer`, `remove_layer`, `move_layer`, `set_layer_*` including blend and mask, `edit_layer_pixels(index, area)`, `edit_layer_mask(index, area)`), which invalidate the right tiles. `render(Rect)` and `flatten()` return the composite. These methods are what milestone 4's commands will call. Canvas operations (resize with anchor, crop, rotate, flip) apply to every layer and its mask; layers keep pixels that fall outside the canvas. *(These canvas ops are milestone 8 work done early; don't add more out-of-scope features.)*
+  - `Document`: canvas size, `LayerStack` and its `Compositor`. Layers are read through `layers()` and changed only through `Document` methods (`add_layer`, `remove_layer`, `move_layer`, `set_layer_*` including blend and mask, `edit_layer_pixels(index, area)`, `edit_layer_mask(index, area)`), which invalidate the right tiles. `render(Rect)` and `flatten()` return the composite. Commands are the only intended callers of these methods. `snapshot()` returns a `DocumentState` (size plus layer stack, sharing every tile) and `restore(state)` puts one back, invalidating only tiles whose storage differs (`TileGrid::changed_tiles`). Canvas operations (resize with anchor, crop, rotate, flip) apply to every layer and its mask; layers keep pixels that fall outside the canvas. *(These canvas ops are milestone 8 work done early; don't add more out-of-scope features.)*
+  - `Command`: base class for every edit. Subclasses hold their parameters as public const values and implement `name()` and `apply(doc)`. The base class provides `execute`, `undo` and `redo`: `execute` snapshots the document first and restores it if `apply` throws; undo and redo swap the saved snapshot with the current state.
+  - `layer_commands.h`, `pixel_commands.h`, `canvas_commands.h`: the concrete commands, header-only, one per `Document` mutator plus `FillCommand` and `FillMaskCommand`.
+  - `Editor`: the command layer. Owns the `Document`, exposes it read-only, runs commands and holds the single undo step (`execute`, `undo`, `redo`, `can_*`, `*_name`).
   - `Viewport`: zoom/pan math, `screen = doc * zoom + offset`, zoom limited to 1:16 to 16:1.
   - `image_io`: load (PNG/JPEG/BMP/TGA/GIF) and PNG save through stb (compiled static; NanoGUI bundles its own copy). *(Overlaps milestone 9; it exists because the viewer and golden tests need it. JPEG export and the native format are still milestone 9.)*
-- `app/` (`mock_photoshop`): NanoGUI shell. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. It uploads the flattened composite as one texture when a file is opened; nothing in the UI edits a document yet, so there is no per-tile re-upload. No editing logic here.
+- `app/` (`mock_photoshop`): NanoGUI shell. It holds an `Editor`, not a bare `Document`. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. It uploads the flattened composite as one texture when a file is opened; nothing in the UI edits a document yet, so there is no per-tile re-upload. No editing logic here.
 - `tests/`: Catch2 v3. Golden PNGs in `tests/golden/`, compared exactly; mismatches are written to `build/tests/output/`.
 - `third_party/stb/`: vendored headers. Catch2 and NanoGUI come through FetchContent.
 
@@ -93,6 +96,8 @@ Document
 - Before a command mutates tiles, snapshot affected tiles (copy-on-write makes this cheap).
 - Undo record: map of `(layer, tile coord) -> old tile`, plus non-pixel state (layer list, properties).
 - **Ship single-level undo/redo toggle (3.0 behavior).** Keep the design able to grow into a history stack.
+- *As built (milestone 4):* the undo record is a whole `DocumentState` snapshot kept by the command, not a per-command map of affected tiles. Copy-on-write means it still only holds on to the tiles that changed, and every command gets correct undo without writing any. Cost: one pointer copy per tile in the document per command. A history stack is a vector of commands in `Editor` instead of one.
+- *Not built:* command serialization. Commands hold plain parameter values so they can be serialized later; nothing reads or writes them yet (needed for Actions, tier 3).
 
 ## Paint engine
 - Dab-based stamping along strokes: spacing, size, hardness, opacity, flow.
@@ -114,7 +119,7 @@ Document
 - [x] **1. Canvas (2h):** tiled storage, GL display, zoom/pan
 - [x] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache *(core only; thread pool deferred, see Compositor)*
 - [x] **3. Blend modes + masks (2h):** Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn; per-layer grayscale masks
-- [ ] **4. Commands + undo (2h):** command dispatch, tile-snapshot single-level undo/redo
+- [x] **4. Commands + undo (2h):** command dispatch, tile-snapshot single-level undo/redo
 - [ ] **5. Selection + paint (4h):** marquee, lasso, magic wand, feather, invert; brush, eraser, paint bucket, eyedropper
 - [ ] **6. Adjustments (2h):** levels, curves, hue/saturation, brightness/contrast, invert
 - [ ] **7. Filters (1.5h):** Gaussian blur, unsharp mask, noise, motion blur, optionally emboss/find edges
@@ -160,4 +165,4 @@ Open a PNG or JPEG, add layers with blend modes and masks, make selections, pain
 
 ## Session log
 - Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Viewer confirmed working by eye; milestone 1 closed. Milestone 2: `blend`, `Layer`, `LayerStack`, tile-cached `Compositor`, `Document` moved onto the stack; core is built with `-ffp-contract=off` so blend goldens are CPU-independent.
-- Session 2 (2026-10-08): README added. Milestone 3: ten blend modes with value tests and a golden each; `TileStore<N>` extracted so `MaskGrid` shares the tile code; layer masks in `Layer`, `Compositor` and `Document`. Thread pool deferred.
+- Session 2 (2026-10-08): README added. Milestone 3: ten blend modes with value tests and a golden each; `TileStore<N>` extracted so `MaskGrid` shares the tile code; layer masks in `Layer`, `Compositor` and `Document`. Thread pool deferred. Milestone 4: `Command` base with snapshot undo, concrete commands for every `Document` mutator, `Editor` with single-level undo/redo, `Document::snapshot`/`restore`; the app now holds an `Editor`.

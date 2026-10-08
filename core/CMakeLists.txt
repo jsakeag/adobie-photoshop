@@ -1,7 +1,9 @@
 add_library(ps_core STATIC
   src/blend.cpp
+  src/command.cpp
   src/compositor.cpp
   src/document.cpp
+  src/editor.cpp
   src/image.cpp
   src/image_io.cpp
   src/layer_stack.cpp

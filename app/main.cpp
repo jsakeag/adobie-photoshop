@@ -11,6 +11,7 @@
 
 #include "canvas_view.h"
 #include "ps/document.h"
+#include "ps/editor.h"
 #include "ps/image_io.h"
 
 namespace {
@@ -70,8 +71,8 @@ class App : public nanogui::Screen {
 
  private:
   void set_document(ps::Document document, const std::string& name) {
-    document_ = std::move(document);
-    canvas_->show(document_.flatten());
+    editor_ = ps::Editor(std::move(document));
+    canvas_->show(editor_.document().flatten());
     set_caption(name + " - Mock Photoshop");
   }
 
@@ -92,20 +93,22 @@ class App : public nanogui::Screen {
   }
 
   void update_status() {
+    const ps::Document& document = editor_.document();
     char text[128];
     int n = std::snprintf(text, sizeof(text), "%.4g%%    %d x %d px",
-                          canvas_->viewport().zoom() * 100.0, document_.width(),
-                          document_.height());
+                          canvas_->viewport().zoom() * 100.0, document.width(),
+                          document.height());
     const int x = static_cast<int>(std::floor(canvas_->cursor().x));
     const int y = static_cast<int>(std::floor(canvas_->cursor().y));
-    if (canvas_->hovering() && x >= 0 && y >= 0 && x < document_.width() &&
-        y < document_.height()) {
+    if (canvas_->hovering() && x >= 0 && y >= 0 && x < document.width() &&
+        y < document.height()) {
       std::snprintf(text + n, sizeof(text) - n, "    X: %d  Y: %d", x, y);
     }
     status_->set_caption(text);
   }
 
-  ps::Document document_{1, 1};
+  // The UI reads editor_.document() and changes it only through commands.
+  ps::Editor editor_{ps::Document(1, 1)};
   CanvasView* canvas_ = nullptr;
   nanogui::Label* status_ = nullptr;
 };

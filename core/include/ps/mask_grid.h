@@ -25,6 +25,9 @@ class MaskGrid {
   std::size_t shared_tiles(const MaskGrid& other) const {
     return store_.shared_tiles(other.store_);
   }
+  std::vector<TileCoord> changed_tiles(const MaskGrid& other) const {
+    return store_.changed_tiles(other.store_);
+  }
   Rect bounds() const { return store_.bounds(); }
   bool any_tile_in(Rect r) const { return store_.any_tile_in(r); }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <vector>
 
 #include "ps/geometry.h"
 #include "ps/image.h"
@@ -22,6 +23,11 @@ class TileGrid {
   // Tiles whose storage is the same block in both grids.
   std::size_t shared_tiles(const TileGrid& other) const {
     return store_.shared_tiles(other.store_);
+  }
+  // Tiles that are not the same block in both grids; the rest hold equal
+  // pixels. Cheap way to find what an edit touched.
+  std::vector<TileCoord> changed_tiles(const TileGrid& other) const {
+    return store_.changed_tiles(other.store_);
   }
   // Smallest tile-aligned rectangle covering every allocated tile.
   Rect bounds() const { return store_.bounds(); }

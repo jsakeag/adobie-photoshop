@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "ps/geometry.h"
 
@@ -65,6 +66,21 @@ class TileStore {
       count += other.find(entry.first) == entry.second.get();
     }
     return count;
+  }
+
+  // Tiles that are not the same block in both stores, including tiles only
+  // one of them has. Tiles left out are guaranteed to hold equal pixels.
+  std::vector<TileCoord> changed_tiles(const TileStore& other) const {
+    std::vector<TileCoord> changed;
+    for (const auto& entry : tiles_) {
+      if (other.find(entry.first) != entry.second.get()) {
+        changed.push_back(entry.first);
+      }
+    }
+    for (const auto& entry : other.tiles_) {
+      if (!find(entry.first)) changed.push_back(entry.first);
+    }
+    return changed;
   }
 
   // Smallest tile-aligned rectangle covering every allocated tile.
