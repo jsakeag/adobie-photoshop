@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <optional>
 
 #include "ps/compositor.h"
 #include "ps/image.h"
@@ -48,9 +49,14 @@ class Document {
   void set_layer_opacity(std::size_t index, float opacity);  // clamped to 0..1
   void set_layer_visible(std::size_t index, bool visible);
   void set_layer_offset(std::size_t index, Point offset);
+  void set_layer_blend(std::size_t index, BlendMode blend);
+  // Adds or replaces the layer's mask; std::nullopt removes it.
+  void set_layer_mask(std::size_t index, std::optional<MaskGrid> mask);
   // The layer's pixels for writing. `area` (layer coordinates) must cover
   // everything the caller is about to change.
   TileGrid& edit_layer_pixels(std::size_t index, Rect area);
+  // The same for the layer's mask. Throws std::logic_error if it has none.
+  MaskGrid& edit_layer_mask(std::size_t index, Rect area);
 
   // The layers composited over transparent, in document coordinates.
   Image render(Rect r) const { return compositor_.render(layers_, r); }
@@ -71,8 +77,8 @@ class Document {
   void flip_vertical();
 
  private:
-  // Rebuilds each layer from `pixels(old image)`, placed where `origin`
-  // maps the layer's old document rectangle.
+  // Rebuilds each layer and its mask from `pixels(old image)`, placed where
+  // `origin` maps the old document rectangle.
   void remap_layers(const std::function<Image(const Image&)>& pixels,
                     const std::function<Point(Rect)>& origin);
 

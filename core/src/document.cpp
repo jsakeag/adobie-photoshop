@@ -1,8 +1,10 @@
 #include "ps/document.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace ps {
 
@@ -17,6 +19,28 @@ void require_size(int width, int height) {
 // Offset of the old content along one axis: 0 = start, 1 = middle, 2 = end.
 int anchor_offset(int old_size, int new_size, int position) {
   return (new_size - old_size) * position / 2;
+}
+
+Rect offset_by(Rect r, Point p) {
+  return {r.x + p.x, r.y + p.y, r.width, r.height};
+}
+
+// Mask values carried in an Image so they can share its flips and rotations.
+Image mask_as_image(const std::vector<std::uint8_t>& values, Rect r) {
+  Image image(r.width, r.height);
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    image.data()[i * Image::kChannels] = values[i];
+  }
+  return image;
+}
+
+std::vector<std::uint8_t> image_as_mask(const Image& image) {
+  std::vector<std::uint8_t> values(static_cast<std::size_t>(image.width()) *
+                                   image.height());
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    values[i] = image.data()[i * Image::kChannels];
+  }
+  return values;
 }
 
 }  // namespace
@@ -76,11 +100,29 @@ void Document::set_layer_offset(std::size_t index, Point offset) {
   compositor_.invalidate(layer.bounds());
 }
 
+void Document::set_layer_blend(std::size_t index, BlendMode blend) {
+  Layer& layer = layers_.at(index);
+  layer.blend = blend;
+  compositor_.invalidate(layer.bounds());
+}
+
+void Document::set_layer_mask(std::size_t index, std::optional<MaskGrid> mask) {
+  Layer& layer = layers_.at(index);
+  layer.mask = std::move(mask);
+  compositor_.invalidate(layer.bounds());
+}
+
 TileGrid& Document::edit_layer_pixels(std::size_t index, Rect area) {
   Layer& layer = layers_.at(index);
-  compositor_.invalidate({area.x + layer.offset.x, area.y + layer.offset.y,
-                          area.width, area.height});
+  compositor_.invalidate(offset_by(area, layer.offset));
   return layer.pixels;
+}
+
+MaskGrid& Document::edit_layer_mask(std::size_t index, Rect area) {
+  Layer& layer = layers_.at(index);
+  if (!layer.mask) throw std::logic_error("Layer has no mask to edit");
+  compositor_.invalidate(offset_by(area, layer.offset));
+  return *layer.mask;
 }
 
 void Document::resize_canvas(int width, int height, Anchor anchor, Color fill) {
@@ -132,12 +174,23 @@ void Document::remap_layers(const std::function<Image(const Image&)>& pixels,
                             const std::function<Point(Rect)>& origin) {
   for (std::size_t i = 0; i < layers_.size(); ++i) {
     Layer& layer = layers_.at(i);
+    const Point old_offset = layer.offset;
     const Rect stored = layer.pixels.bounds();
-    if (stored.empty()) continue;
     const Image remapped = pixels(layer.pixels.read(stored));
-    layer.offset = origin(layer.bounds());
+    // The rebuilt pixels start at the layer's own (0, 0).
+    layer.offset = origin(offset_by(stored, old_offset));
     layer.pixels.clear();
     layer.pixels.write(remapped, {0, 0});
+
+    if (!layer.mask || layer.mask->empty()) continue;
+    const Rect masked = layer.mask->bounds();
+    const Image mask =
+        pixels(mask_as_image(layer.mask->read(masked), masked));
+    const Point at = origin(offset_by(masked, old_offset));
+    layer.mask->clear();
+    layer.mask->write(image_as_mask(mask),
+                      {at.x - layer.offset.x, at.y - layer.offset.y,
+                       mask.width(), mask.height()});
   }
   compositor_.invalidate_all();
 }

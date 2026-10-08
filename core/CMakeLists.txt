@@ -5,6 +5,7 @@ add_library(ps_core STATIC
   src/image.cpp
   src/image_io.cpp
   src/layer_stack.cpp
+  src/mask_grid.cpp
   src/tile_grid.cpp
   src/viewport.cpp
 )

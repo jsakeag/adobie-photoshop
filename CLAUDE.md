@@ -3,8 +3,8 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 3 (Blend modes + masks): not started
-**Next step:** Add the ten blend modes to `blend.cpp`, one golden each, then per-layer grayscale masks (needs a single-channel `TileGrid`). Open question carried over from milestone 2: the compositor is single-threaded; decide which milestone the thread pool belongs to.
+**Current milestone:** 4 (Commands + undo): not started
+**Next step:** Design the `Command` interface (name, parameters, execute, undo) and a dispatcher on top of the `Document` mutators, then tile-snapshot single-level undo/redo with the undo-then-redo property test.
 
 ## Build and test
 ```
@@ -35,12 +35,14 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
 ## Architecture (as built)
 - `core/` (`ps_core`, namespace `ps`): headless, no UI or GL includes. Everything testable lives here.
   - `Image`: owning flat RGBA8 buffer, straight alpha, top-left origin. Not document storage: it carries pixels in and out of a `TileGrid` (file I/O, texture upload, regions).
-  - `TileGrid`: document pixel storage. Sparse and unbounded (negative coordinates allowed), 64x64 tiles allocated on first write, copy-on-write through `shared_ptr`. Missing tiles read as transparent. `read(Rect)` and `write(Image, Point)` exchange flat regions. Tile coordinates (`TileCoord`, `tile_index`, `tile_rect`) are public so the compositor can cache per tile. RGBA only so far; the 8-bit single-channel variant for masks and selections is milestone 3 work.
-  - `blend`: `BlendMode` (Normal only so far) and the pure pixel functions: `premultiply`, `unpremultiply`, `blend(mode, dst, src)` on premultiplied float RGBA.
-  - `Layer`: name, `TileGrid` pixels, offset, opacity (0..1), visible, blend. No mask yet.
+  - `TileGrid`: document pixel storage. Sparse and unbounded (negative coordinates allowed), 64x64 tiles allocated on first write, copy-on-write through `shared_ptr`. Missing tiles read as transparent. `read(Rect)` and `write(Image, Point)` exchange flat regions.
+  - `MaskGrid`: the 8-bit single-channel grid for layer masks (and selections in milestone 5). Same tiles and copy-on-write, plus a background value that missing tiles read as, so reveal-all (255) and hide-all (0) masks cost nothing. `read`/`write` exchange `std::vector<uint8_t>` regions.
+  - `TileStore<N>` (`tile_store.h`): the header-only template both grids wrap; all tile, copy-on-write and background logic lives there. Also defines `kTileSize`, `TileCoord`, `tile_index`, `tile_rect`.
+  - `blend`: `BlendMode` (Normal plus the ten milestone 3 modes) and the pure pixel functions: `premultiply`, `unpremultiply`, `blend(mode, dst, src)` on premultiplied float RGBA. A mode is one per-channel function of straight backdrop and source; `blend` applies it only where both pixels have coverage. Soft Light uses Photoshop's formula (square root), not the W3C one.
+  - `Layer`: name, `TileGrid` pixels, offset, opacity (0..1), visible, blend, optional `MaskGrid` mask in layer coordinates (it moves with the layer).
   - `LayerStack`: layers bottom to top; insert, remove, move.
-  - `Compositor`: flattens a stack per 64x64 document tile, bottom-up, and caches the result. It does not watch layers: callers `invalidate(Rect)` and only those tiles are redone. Single-threaded.
-  - `Document`: canvas size, `LayerStack` and its `Compositor`. Layers are read through `layers()` and changed only through `Document` methods (`add_layer`, `remove_layer`, `move_layer`, `set_layer_*`, `edit_layer_pixels(index, area)`), which invalidate the right tiles. `render(Rect)` and `flatten()` return the composite. These methods are what milestone 4's commands will call. Canvas operations (resize with anchor, crop, rotate, flip) apply to every layer; layers keep pixels that fall outside the canvas. *(These canvas ops are milestone 8 work done early; don't add more out-of-scope features.)*
+  - `Compositor`: flattens a stack per 64x64 document tile, bottom-up (pixels x mask x opacity, then blend), and caches the result. It does not watch layers: callers `invalidate(Rect)` and only those tiles are redone. Single-threaded.
+  - `Document`: canvas size, `LayerStack` and its `Compositor`. Layers are read through `layers()` and changed only through `Document` methods (`add_layer`, `remove_layer`, `move_layer`, `set_layer_*` including blend and mask, `edit_layer_pixels(index, area)`, `edit_layer_mask(index, area)`), which invalidate the right tiles. `render(Rect)` and `flatten()` return the composite. These methods are what milestone 4's commands will call. Canvas operations (resize with anchor, crop, rotate, flip) apply to every layer and its mask; layers keep pixels that fall outside the canvas. *(These canvas ops are milestone 8 work done early; don't add more out-of-scope features.)*
   - `Viewport`: zoom/pan math, `screen = doc * zoom + offset`, zoom limited to 1:16 to 16:1.
   - `image_io`: load (PNG/JPEG/BMP/TGA/GIF) and PNG save through stb (compiled static; NanoGUI bundles its own copy). *(Overlaps milestone 9; it exists because the viewer and golden tests need it. JPEG export and the native format are still milestone 9.)*
 - `app/` (`mock_photoshop`): NanoGUI shell. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. It uploads the flattened composite as one texture when a file is opened; nothing in the UI edits a document yet, so there is no per-tile re-upload. No editing logic here.
@@ -85,7 +87,7 @@ Document
 ## Compositor
 - Walks the stack bottom-up per dirty tile: pixels x mask x opacity, then blend.
 - Per-tile composite cache with dirty-rect invalidation. An edit invalidates only affected tiles.
-- Runs on a thread pool. UI shows a stale tile until the fresh one is ready. *(Not built: the compositor is synchronous and no milestone lists this.)*
+- Runs on a thread pool. UI shows a stale tile until the fresh one is ready. *(Deferred, decided 2026-10-08: the compositor stays synchronous until the UI needs it. Do not build it before then.)*
 
 ## Undo
 - Before a command mutates tiles, snapshot affected tiles (copy-on-write makes this cheap).
@@ -110,8 +112,8 @@ Document
 
 ### Tier 1: must ship
 - [x] **1. Canvas (2h):** tiled storage, GL display, zoom/pan
-- [x] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache *(core only; the thread pool from the Compositor section is not built)*
-- [ ] **3. Blend modes + masks (2h):** Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn; per-layer grayscale masks
+- [x] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache *(core only; thread pool deferred, see Compositor)*
+- [x] **3. Blend modes + masks (2h):** Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn; per-layer grayscale masks
 - [ ] **4. Commands + undo (2h):** command dispatch, tile-snapshot single-level undo/redo
 - [ ] **5. Selection + paint (4h):** marquee, lasso, magic wand, feather, invert; brush, eraser, paint bucket, eyedropper
 - [ ] **6. Adjustments (2h):** levels, curves, hue/saturation, brightness/contrast, invert
@@ -158,3 +160,4 @@ Open a PNG or JPEG, add layers with blend modes and masks, make selections, pain
 
 ## Session log
 - Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Viewer confirmed working by eye; milestone 1 closed. Milestone 2: `blend`, `Layer`, `LayerStack`, tile-cached `Compositor`, `Document` moved onto the stack; core is built with `-ffp-contract=off` so blend goldens are CPU-independent.
+- Session 2 (2026-10-08): README added. Milestone 3: ten blend modes with value tests and a golden each; `TileStore<N>` extracted so `MaskGrid` shares the tile code; layer masks in `Layer`, `Compositor` and `Document`. Thread pool deferred.

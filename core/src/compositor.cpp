@@ -66,15 +66,22 @@ void Compositor::composite_tile(const LayerStack& stack, TileCoord coord) {
     if (!layer.pixels.any_tile_in(source)) continue;
 
     const Image pixels = layer.pixels.read(source);
+    std::vector<std::uint8_t> mask;
+    if (layer.mask) mask = layer.mask->read(source);
     const float opacity = std::min(layer.opacity, 1.0f);
     const std::uint8_t* p = pixels.data();
     for (int i = 0; i < kPixelsPerTile; ++i, p += Image::kChannels) {
       if (p[3] == 0) continue;
+      float coverage = opacity;
+      if (layer.mask) {
+        if (mask[i] == 0) continue;
+        coverage *= mask[i] / 255.0f;
+      }
       Premul src = premultiply({p[0], p[1], p[2], p[3]});
-      src.r *= opacity;
-      src.g *= opacity;
-      src.b *= opacity;
-      src.a *= opacity;
+      src.r *= coverage;
+      src.g *= coverage;
+      src.b *= coverage;
+      src.a *= coverage;
       result[i] = blend(layer.blend, result[i], src);
     }
     drawn = true;

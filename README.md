@@ -2,7 +2,7 @@
 
 A raster image editor modeled on Photoshop 3.0-4.0, written in C++17. The core is headless; a thin NanoGUI app shows the result. See [CLAUDE.md](CLAUDE.md) for the plan and architecture.
 
-**Status:** milestones 1 (canvas) and 2 (layers + compositor) are done. Layers exist in the core only: there is no UI to add or edit them yet.
+**Status:** milestones 1 (canvas), 2 (layers + compositor) and 3 (blend modes + masks) are done. Layers exist in the core only: there is no UI to add or edit them yet.
 
 ## Build and test
 
@@ -38,14 +38,24 @@ doc.add_layer(doc.layers().size(), red);     // add on top
 
 doc.set_layer_opacity(1, 0.5f);              // 0..1
 doc.set_layer_visible(1, true);
-doc.move_layer(1, 0);                        // indices run bottom to top
+doc.set_layer_blend(1, BlendMode::Multiply);
 
-doc.edit_layer_pixels(0, {0, 0, 10, 10})     // declare the area you will change,
-    .fill({0, 0, 10, 10}, {0, 0, 255, 255}); // then write to it
+MaskGrid mask(255);                          // 255 shows, 0 hides; starts all-showing
+mask.fill({20, 20, 40, 60}, 0);              // hide the box's left half (layer coordinates)
+doc.set_layer_mask(1, mask);
+doc.edit_layer_mask(1, {20, 20, 10, 10})     // paint on the mask later
+    .fill({20, 20, 10, 10}, 128);
+
+doc.edit_layer_pixels(1, {70, 30, 20, 20})   // declare the area you will change,
+    .fill({70, 30, 20, 20}, {0, 0, 255, 255});  // then write to it
 
 save_png(doc.flatten(), "out.png");          // composite of all layers
 ```
 
-Change layers only through the `Document` methods. They tell the compositor which tiles are stale; editing `doc.layers()` directly leaves the cache out of date. Only Normal blend exists so far.
+`doc.move_layer(from, to)` reorders and `doc.remove_layer(index)` deletes; indices run bottom to top, so the background is 0.
 
-Working examples are in [tests/test_document_layers.cpp](tests/test_document_layers.cpp) and [tests/test_compositor.cpp](tests/test_compositor.cpp).
+Change layers only through the `Document` methods. They tell the compositor which tiles are stale; editing `doc.layers()` directly leaves the cache out of date.
+
+Blend modes: Normal, Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn. `tests/golden/blend_*.png` shows what each one does.
+
+Working examples are in [tests/test_document_layers.cpp](tests/test_document_layers.cpp), [tests/test_layer_mask.cpp](tests/test_layer_mask.cpp) and [tests/test_blend.cpp](tests/test_blend.cpp).

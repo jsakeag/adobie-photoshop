@@ -16,7 +16,9 @@ add_executable(ps_tests
   test_document_layers.cpp
   test_image.cpp
   test_image_io.cpp
+  test_layer_mask.cpp
   test_layer_stack.cpp
+  test_mask_grid.cpp
   test_tile_grid.cpp
   test_viewport.cpp
 )
