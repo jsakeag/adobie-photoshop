@@ -17,7 +17,7 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
 ## Session protocol
 1. Start: read this file, run the full test suite, confirm it's green.
 2. Work on the current milestone only. Do not start the next one early.
-3. End: run tests, commit, update "Current milestone" and "Next step" above.
+3. End: run tests, update README.md (status line, and usage for anything user-facing that changed; compile any code sample you touch), commit, update "Current milestone" and "Next step" above.
 4. If a milestone runs over its estimate by 50%, cut scope within it. Do not borrow time from the next one.
 5. Keep ~2 hours of buffer. Do not spend it on features.
 
