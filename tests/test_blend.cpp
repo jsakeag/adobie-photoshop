@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <string>
+#include <vector>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -313,4 +314,19 @@ TEST_CASE("Blend modes match their golden images", "[blend][golden]") {
     CHECK(golden_mismatch(compositor.render(stack, {0, 0, size, size}),
                           std::string("blend_") + m.name) == "");
   }
+}
+
+TEST_CASE("Every blend mode has a distinct menu name", "[blend]") {
+  std::vector<std::string> names;
+  for (BlendMode mode : kBlendModes) {
+    const std::string name = blend_mode_name(mode);
+    CAPTURE(name);
+    CHECK_FALSE(name.empty());
+    CHECK(std::find(names.begin(), names.end(), name) == names.end());
+    names.push_back(name);
+  }
+  CHECK(names.size() == 11);
+  CHECK(names.front() == "Normal");
+  CHECK(std::string(blend_mode_name(BlendMode::SoftLight)) == "Soft Light");
+  CHECK(std::string(blend_mode_name(BlendMode::ColorDodge)) == "Color Dodge");
 }

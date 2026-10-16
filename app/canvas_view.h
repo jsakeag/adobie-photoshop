@@ -13,6 +13,9 @@ class CanvasView : public nanogui::ImageView {
 
   // Uploads the pixels and fits them to the widget's current size.
   void show(const ps::Image& pixels);
+  // Uploads new pixels for the same document. Keeps zoom and pan unless the
+  // size changed, in which case it fits like show().
+  void update(const ps::Image& pixels);
 
   const ps::Viewport& viewport() const { return viewport_; }
   // Document position under the mouse, valid while `hovering()`.

@@ -156,3 +156,18 @@ TEST_CASE("An editing session driven only by commands", "[editor]") {
   CHECK(editor.document().flatten() == direct.flatten());
   CHECK(cache_is_current(editor.document()));
 }
+
+TEST_CASE("Editor toggle_undo flips between undo and redo", "[editor]") {
+  Editor editor(Document(40, 30));
+  CHECK_FALSE(editor.toggle_undo());
+
+  editor.execute(fill({0, 0, 10, 10}, kRed));
+  const DocumentState after = editor.document().snapshot();
+
+  CHECK(editor.toggle_undo());  // undo
+  CHECK(editor.can_redo());
+  CHECK(editor.document().flatten() == Image(40, 30, kWhite));
+  CHECK(editor.toggle_undo());  // redo
+  CHECK(editor.can_undo());
+  CHECK(same_state(editor.document().snapshot(), after));
+}

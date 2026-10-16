@@ -23,6 +23,14 @@ void CanvasView::show(const ps::Image& pixels) {
   fit();
 }
 
+void CanvasView::update(const ps::Image& pixels) {
+  if (!m_image || m_image->size() != Vector2i(pixels.width(), pixels.height())) {
+    show(pixels);
+    return;
+  }
+  m_image->upload(pixels.data());
+}
+
 void CanvasView::fit() {
   if (!m_image) return;
   viewport_.fit(m_image->size().x(), m_image->size().y(), m_size.x(), m_size.y());

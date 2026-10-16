@@ -76,6 +76,23 @@ ChannelBlend channel_blend(BlendMode mode) {
 
 }  // namespace
 
+const char* blend_mode_name(BlendMode mode) {
+  switch (mode) {
+    case BlendMode::Normal: return "Normal";
+    case BlendMode::Multiply: return "Multiply";
+    case BlendMode::Screen: return "Screen";
+    case BlendMode::Overlay: return "Overlay";
+    case BlendMode::SoftLight: return "Soft Light";
+    case BlendMode::HardLight: return "Hard Light";
+    case BlendMode::Darken: return "Darken";
+    case BlendMode::Lighten: return "Lighten";
+    case BlendMode::Difference: return "Difference";
+    case BlendMode::ColorDodge: return "Color Dodge";
+    case BlendMode::ColorBurn: return "Color Burn";
+  }
+  return "";
+}
+
 Premul premultiply(Color c) {
   const float a = c.a / 255.0f;
   return {c.r / 255.0f * a, c.g / 255.0f * a, c.b / 255.0f * a, a};

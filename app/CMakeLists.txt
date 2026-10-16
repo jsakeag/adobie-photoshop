@@ -14,7 +14,12 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nanogui)
 
 add_executable(mock_photoshop
+  app.cpp
   canvas_view.cpp
+  layers_panel.cpp
   main.cpp
+  selftest.cpp
 )
 target_link_libraries(mock_photoshop PRIVATE ps_core nanogui)
+# Apple deprecates OpenGL; NanoGUI's backend and our screenshot code use it.
+target_compile_definitions(mock_photoshop PRIVATE GL_SILENCE_DEPRECATION)

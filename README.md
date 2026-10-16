@@ -2,7 +2,7 @@
 
 A raster image editor modeled on Photoshop 3.0-4.0, written in C++17. The core is headless; a thin NanoGUI app shows the result. See [CLAUDE.md](CLAUDE.md) for the plan and architecture.
 
-**Status:** milestones 1 (canvas), 2 (layers + compositor), 3 (blend modes + masks) and 4 (commands + undo) are done. Editing exists in the core only: the app is still a viewer, with no UI to add or edit layers yet.
+**Status:** milestones 1 (canvas), 2 (layers + compositor), 3 (blend modes + masks), 4 (commands + undo) and 4b (GUI for all of those) are done. There are no painting or selection tools yet (milestone 5).
 
 ## Build and test
 
@@ -13,13 +13,28 @@ cmake -S . -B build && cmake --build build -j
 
 Add `-DPS_BUILD_APP=OFF` to the first command to skip the NanoGUI app.
 
-## Run the viewer
+## Run the app
 
 ```
 ./build/app/mock_photoshop path/to/image.png
 ```
 
-Drag to pan, scroll to zoom. Cmd+O opens a file (or drop one on the window); Cmd with `=`, `-`, `0`, `1` zooms in, out, fits, or goes to 100%.
+- **View:** drag to pan, scroll to zoom. Cmd with `=`, `-`, `0`, `1` zooms in, out, fits, or goes to 100%.
+- **Open:** Cmd+O, or drop a file on the window. This replaces the document.
+- **Undo:** Cmd+Z, or the button at the top of the Layers palette. Undo is single-level as in Photoshop 3: Cmd+Z again redoes.
+- **Layers palette** (right side; drag its title bar to move it):
+  - The list shows the top layer first. Click a name to select it; the checkbox shows or hides it. `[mask]` marks a layer with a mask.
+  - The blend mode menu and opacity slider act on the selected layer.
+  - **New** adds an empty layer above the selection, **Delete** removes the selection (not the last layer), **Up**/**Down** reorder.
+  - **Open Image as Layer...** adds a file as a new layer, centred on the canvas. This is the way to get a second image in to try blend modes.
+  - **Layer mask: Reveal All / Hide All** adds a mask that shows or hides the whole layer; **Remove** deletes it. Painting on masks comes with the paint tools in milestone 5.
+
+To check the GUI without clicking through it, `--selftest` runs the same actions the widgets call, checks the document after each, and saves screenshots:
+
+```
+mkdir -p /tmp/shots
+./build/app/mock_photoshop --selftest /tmp/shots tests/fixtures/selftest_base.png tests/fixtures/selftest_layer.png
+```
 
 ## Editing a document (C++)
 

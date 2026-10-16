@@ -29,6 +29,9 @@ class Editor {
   // Return false, doing nothing, when there is nothing to undo or redo.
   bool undo();
   bool redo();
+  // Photoshop 3's Cmd+Z: undoes the last command, or redoes it if it is
+  // already undone. Returns false when there is no command.
+  bool toggle_undo() { return can_undo() ? undo() : redo(); }
 
   // Name of the command undo() or redo() would act on; empty if none.
   std::string undo_name() const { return can_undo() ? last_->name() : ""; }

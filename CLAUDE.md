@@ -3,13 +3,15 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 4b (GUI catch-up): not started. Milestones 1-4 have core code but only the viewer has a UI; bind them before starting milestone 5.
-**Next step:** Build the GUI for what exists: Edit menu or buttons for undo/redo (Cmd+Z toggles, single-level), a layers panel (list top first, eye toggle, select, opacity slider, blend mode picker, new/delete/reorder, add or remove mask, open an image as a new layer), each action a command through the `Editor`. Then milestone 5. Milestone 5 plan, once it starts: add `Selection` to `Document` as a `MaskGrid` (marquee, lasso, magic wand, feather, invert), each as a command; then the dab-based paint engine and the brush, eraser, paint bucket and eyedropper tools. 4h is tight for this list: decide what to cut first if it runs over.
+**Current milestone:** 5 (Selection + paint): not started.
+**Next step:** Add `Selection` to `Document` as a `MaskGrid` (marquee, lasso, magic wand, feather, invert), each as a command; then the dab-based paint engine and the brush, eraser, paint bucket and eyedropper tools. Each needs its GUI: a toolbox, mouse input on `CanvasView` routed to tools, tool options, and `--selftest` steps. 4h is tight for this list: decide what to cut first if it runs over (suggest lasso and magic wand).
 
 ## Build and test
 ```
 cmake -S . -B build && cmake --build build -j
 ./build/tests/ps_tests                           # full suite
+mkdir -p /tmp/shots && ./build/app/mock_photoshop --selftest /tmp/shots \
+  tests/fixtures/selftest_base.png tests/fixtures/selftest_layer.png   # GUI checks + screenshots
 PS_UPDATE_GOLDEN=1 ./build/tests/ps_tests "[golden]"   # rewrite goldens, then look at them
 cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips NanoGUI
 ```
@@ -17,7 +19,7 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
 ## Session protocol
 1. Start: read this file, run the full test suite, confirm it's green.
 2. Work on the current milestone only. Do not start the next one early. **Every milestone includes its GUI binding**: a feature is not done until it can be used from the app, through a command, and the README says how.
-3. End: run tests, run the app once (the GUI cannot be screenshotted in this environment, so say plainly what was and wasn't checked), update README.md (status line, and usage for anything user-facing that changed; compile any code sample you touch), commit, update "Current milestone" and "Next step" above.
+3. End: run tests, run `--selftest` and look at its screenshots (macOS screen capture is blocked here; the self-test reads the app's own framebuffer instead). Extend the self-test with steps for any new GUI. Say plainly what it does not cover: real mouse clicks, popups, file dialogs, key mapping. Update README.md (status line, and usage for anything user-facing that changed; compile any code sample you touch), commit, update "Current milestone" and "Next step" above.
 4. If a milestone runs over its estimate by 50%, cut scope within it. Do not borrow time from the next one.
 5. Keep ~2 hours of buffer. Do not spend it on features.
 
@@ -48,8 +50,12 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
   - `Editor`: the command layer. Owns the `Document`, exposes it read-only, runs commands and holds the single undo step (`execute`, `undo`, `redo`, `can_*`, `*_name`).
   - `Viewport`: zoom/pan math, `screen = doc * zoom + offset`, zoom limited to 1:16 to 16:1.
   - `image_io`: load (PNG/JPEG/BMP/TGA/GIF) and PNG save through stb (compiled static; NanoGUI bundles its own copy). *(Overlaps milestone 9; it exists because the viewer and golden tests need it. JPEG export and the native format are still milestone 9.)*
-- `app/` (`mock_photoshop`): NanoGUI shell. It holds an `Editor`, not a bare `Document`. `CanvasView` draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. It uploads the flattened composite as one texture when a file is opened; nothing in the UI edits a document yet, so there is no per-tile re-upload. No editing logic here.
-  - **The GUI exists and grows with the core.** Today it is a viewer: open (Cmd+O or drop), pan, zoom, cursor coordinates. From milestone 4b on, each milestone adds its controls (see Scope). Widgets only read `editor.document()` and issue commands; anything with logic goes in `core/` so it can be tested headless.
+- `app/` (`mock_photoshop`): NanoGUI shell. No editing logic here.
+  - **The GUI exists and grows with the core.** Each milestone adds its controls (see Scope). Widgets only read `editor.document()` and issue commands; anything with logic goes in `core/` so it can be tested headless.
+  - `App` (`app.h`): the main window. Holds the `Editor` and the selected layer index (UI state, not document state). Its public actions (`open_as_layer`, `set_blend`, `add_mask`, `toggle_undo`, ...) are what widgets and shortcuts call; each builds a command and runs it, showing errors in the status bar. Widgets are rebuilt in `refresh()` from `draw_all`, never inside their own callbacks.
+  - `CanvasView`: draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. Re-uploads the whole flattened composite after each command (`update` keeps the view unless the size changed); per-tile upload can come later if it is slow.
+  - `LayersPanel`: the Layers palette window. Undo/redo toggle, blend mode, opacity (command on slider release), layer rows (top first: visibility checkbox, select button), New/Delete/Up/Down, Open Image as Layer, mask Reveal All/Hide All/Remove.
+  - `selftest.cpp`: `--selftest out_dir base.png layer.png` drives `App`'s actions, checks the document and saves screenshots via `App::capture` (reads the back buffer in `draw_teardown`). Fixtures in `tests/fixtures/`.
 - `tests/`: Catch2 v3. Golden PNGs in `tests/golden/`, compared exactly; mismatches are written to `build/tests/output/`.
 - `third_party/stb/`: vendored headers. Catch2 and NanoGUI come through FetchContent.
 
@@ -122,7 +128,7 @@ Document
 - [x] **2. Layers + compositor (3h):** stack, opacity, visibility, reorder, Normal blend, dirty-tile cache *(core only; thread pool deferred, see Compositor)*
 - [x] **3. Blend modes + masks (2h):** Multiply, Screen, Overlay, Soft Light, Hard Light, Darken, Lighten, Difference, Color Dodge, Color Burn; per-layer grayscale masks
 - [x] **4. Commands + undo (2h):** command dispatch, tile-snapshot single-level undo/redo
-- [ ] **4b. GUI catch-up (1.5h):** undo/redo, layers panel (visibility, select, opacity, blend mode, new/delete/reorder, mask add/remove, open as layer). Taken from milestone 10's time; each later milestone budgets its own GUI work inside its estimate.
+- [x] **4b. GUI catch-up (1.5h):** undo/redo, layers panel (visibility, select, opacity, blend mode, new/delete/reorder, mask add/remove, open as layer). Taken from milestone 10's time; each later milestone budgets its own GUI work inside its estimate.
 - [ ] **5. Selection + paint (4h):** marquee, lasso, magic wand, feather, invert; brush, eraser, paint bucket, eyedropper
 - [ ] **6. Adjustments (2h):** levels, curves, hue/saturation, brightness/contrast, invert
 - [ ] **7. Filters (1.5h):** Gaussian blur, unsharp mask, noise, motion blur, optionally emboss/find edges
@@ -170,3 +176,4 @@ Open a PNG or JPEG, add layers with blend modes and masks, make selections, pain
 - Session 1: core `Image`/`Document`/`Viewport`, stb I/O, Catch2 goldens, NanoGUI viewer. Then `TileGrid` (64x64, sparse, copy-on-write) as `Document` storage. Canvas resize/crop/rotate/flip were built early (milestone 8). Viewer confirmed working by eye; milestone 1 closed. Milestone 2: `blend`, `Layer`, `LayerStack`, tile-cached `Compositor`, `Document` moved onto the stack; core is built with `-ffp-contract=off` so blend goldens are CPU-independent.
 - Session 2 (2026-10-08): README added. Milestone 3: ten blend modes with value tests and a golden each; `TileStore<N>` extracted so `MaskGrid` shares the tile code; layer masks in `Layer`, `Compositor` and `Document`. Thread pool deferred. Milestone 4: `Command` base with snapshot undo, concrete commands for every `Document` mutator, `Editor` with single-level undo/redo, `Document::snapshot`/`restore`; the app now holds an `Editor`.
 - Session 2 decision (2026-10-08): GUI pulled forward. Milestone 10 shrinks to polish; milestone 4b binds milestones 2-4 to the GUI; later milestones include their own controls. No GUI code written yet.
+- Session 3 (2026-10-16): milestone 4b. Layers palette and Cmd+Z toggle in the app, `blend_mode_name`/`kBlendModes` and `Editor::toggle_undo` in core, `--selftest` with framebuffer screenshots (all checks pass, screenshots inspected).

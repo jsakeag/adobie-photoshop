@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include "ps/image.h"
 
 namespace ps {
@@ -17,6 +19,17 @@ enum class BlendMode {
   ColorDodge,
   ColorBurn,
 };
+
+// Every mode, in Photoshop's menu order.
+inline constexpr std::array<BlendMode, 11> kBlendModes = {
+    BlendMode::Normal,     BlendMode::Multiply,   BlendMode::Screen,
+    BlendMode::Overlay,    BlendMode::SoftLight,  BlendMode::HardLight,
+    BlendMode::ColorDodge, BlendMode::ColorBurn,  BlendMode::Darken,
+    BlendMode::Lighten,    BlendMode::Difference,
+};
+
+// The mode's name as Photoshop shows it, such as "Soft Light".
+const char* blend_mode_name(BlendMode mode);
 
 // Premultiplied RGBA with channels in 0..1: the compositor's working format.
 struct Premul {
