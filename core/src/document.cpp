@@ -99,6 +99,7 @@ void Document::restore(const DocumentState& state) {
   width_ = state.width;
   height_ = state.height;
   layers_ = state.layers;
+  selection_ = state.selection;
 }
 
 void Document::add_layer(std::size_t index, Layer layer) {
@@ -193,6 +194,7 @@ void Document::resize_canvas(int width, int height, Anchor anchor, Color fill) {
                          fill);
     }
   }
+  selection_.reset();
   compositor_.invalidate_all();
 }
 
@@ -205,6 +207,7 @@ void Document::crop(Rect r) {
   }
   width_ = r.width;
   height_ = r.height;
+  selection_.reset();
   compositor_.invalidate_all();
 }
 
@@ -230,6 +233,7 @@ void Document::remap_layers(const std::function<Image(const Image&)>& pixels,
                       {at.x - layer.offset.x, at.y - layer.offset.y,
                        mask.width(), mask.height()});
   }
+  selection_.reset();
   compositor_.invalidate_all();
 }
 

@@ -11,6 +11,7 @@ FetchContent_MakeAvailable(Catch2)
 add_executable(ps_tests
   golden.cpp
   test_blend.cpp
+  test_brush.cpp
   test_commands.cpp
   test_compositor.cpp
   test_document.cpp
@@ -22,7 +23,10 @@ add_executable(ps_tests
   test_layer_mask.cpp
   test_layer_stack.cpp
   test_mask_grid.cpp
+  test_paint.cpp
+  test_selection.cpp
   test_tile_grid.cpp
+  test_tools.cpp
   test_viewport.cpp
 )
 target_link_libraries(ps_tests PRIVATE ps_core Catch2::Catch2WithMain)

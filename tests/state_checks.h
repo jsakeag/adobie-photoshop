@@ -20,7 +20,8 @@ inline bool same_state(const ps::DocumentState& a, const ps::DocumentState& b) {
   for (std::size_t i = 0; i < a.layers.size(); ++i) {
     if (!same_layer(a.layers.at(i), b.layers.at(i))) return false;
   }
-  return true;
+  return a.selection.has_value() == b.selection.has_value() &&
+         (!a.selection || *a.selection == *b.selection);
 }
 
 // What the document should show, composited from scratch with no cache.

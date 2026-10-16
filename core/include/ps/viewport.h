@@ -1,11 +1,8 @@
 #pragma once
 
-namespace ps {
+#include "ps/geometry.h"
 
-struct Vec2 {
-  double x = 0.0;
-  double y = 0.0;
-};
+namespace ps {
 
 // Maps between document pixels and view (widget) coordinates.
 // screen = doc * zoom + offset, so `offset` is where the document's

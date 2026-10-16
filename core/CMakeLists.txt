@@ -1,5 +1,6 @@
 add_library(ps_core STATIC
   src/blend.cpp
+  src/brush.cpp
   src/command.cpp
   src/compositor.cpp
   src/document.cpp
@@ -8,7 +9,10 @@ add_library(ps_core STATIC
   src/image_io.cpp
   src/layer_stack.cpp
   src/mask_grid.cpp
+  src/paint.cpp
+  src/selection.cpp
   src/tile_grid.cpp
+  src/tools.cpp
   src/viewport.cpp
 )
 target_include_directories(ps_core PUBLIC include)

@@ -2,7 +2,7 @@
 
 A raster image editor modeled on Photoshop 3.0-4.0, written in C++17. The core is headless; a thin NanoGUI app shows the result. See [CLAUDE.md](CLAUDE.md) for the plan and architecture.
 
-**Status:** milestones 1 (canvas), 2 (layers + compositor), 3 (blend modes + masks), 4 (commands + undo) and 4b (GUI for all of those) are done. There are no painting or selection tools yet (milestone 5).
+**Status:** milestones 1-5 are done: canvas, layers and compositor, blend modes and masks, commands and undo, and selection and paint tools, all usable from the app. Next is adjustments (milestone 6).
 
 ## Build and test
 
@@ -19,7 +19,7 @@ Add `-DPS_BUILD_APP=OFF` to the first command to skip the NanoGUI app.
 ./build/app/mock_photoshop path/to/image.png
 ```
 
-- **View:** drag to pan, scroll to zoom. Cmd with `=`, `-`, `0`, `1` zooms in, out, fits, or goes to 100%.
+- **View:** scroll to zoom; drag with the right button, or hold Space and drag, to pan. Cmd with `=`, `-`, `0`, `1` zooms in, out, fits, or goes to 100%.
 - **Open:** Cmd+O, or drop a file on the window. This replaces the document.
 - **Undo:** Cmd+Z, or the button at the top of the Layers palette. Undo is single-level as in Photoshop 3: Cmd+Z again redoes.
 - **Layers palette** (right side; drag its title bar to move it):
@@ -27,9 +27,26 @@ Add `-DPS_BUILD_APP=OFF` to the first command to skip the NanoGUI app.
   - The blend mode menu and opacity slider act on the selected layer.
   - **New** adds an empty layer above the selection, **Delete** removes the selection (not the last layer), **Up**/**Down** reorder.
   - **Open Image as Layer...** adds a file as a new layer, centred on the canvas. This is the way to get a second image in to try blend modes.
-  - **Layer mask: Reveal All / Hide All** adds a mask that shows or hides the whole layer; **Remove** deletes it. Painting on masks comes with the paint tools in milestone 5.
+  - **Layer mask: Reveal All / Hide All** adds a mask that shows or hides the whole layer; **Remove** deletes it. To paint on it, choose **Paint on: Mask** in the Tools palette.
+- **Tools palette** (left side). Click a tool, then drag on the canvas. Letter keys pick tools as in Photoshop.
 
-To check the GUI without clicking through it, `--selftest` runs the same actions the widgets call, checks the document after each, and saves screenshots:
+  | Tool | Key | What a drag or click does |
+  | --- | --- | --- |
+  | Marquee / Ellipse | M (press again to switch) | Selects a rectangle or ellipse. A click without dragging deselects. |
+  | Lasso | L | Selects the outline you trace. |
+  | Magic Wand | W | Selects the connected area of similar colour on the selected layer (Tolerance). |
+  | Brush | B | Paints the foreground colour (Size, Hardness, Opacity). |
+  | Eraser | E | Erases to transparency, or on a mask paints it back to white. |
+  | Bucket | K | Fills the connected area of similar colour (Tolerance, Opacity). |
+  | Eyedropper | I | Sets the foreground colour from the picture. |
+
+  - Hold **Shift** while starting a selection to add to the current one, **Option** to subtract from it.
+  - Painting and filling only change the selected area when something is selected, and feathered edges paint partly.
+  - **Colour** opens a picker for the foreground colour. **Paint on: Layer / Mask** chooses whether tools change the layer's pixels or its mask (black hides, white shows).
+  - **Select: All / None / Inverse** (also Cmd+A, Cmd+D, Cmd+Shift+I) and **Feather** with its radius slider.
+  - Esc cancels a drag in progress. Every stroke, fill and selection change is one undo step.
+
+To check the GUI without clicking through it, `--selftest` runs the same actions the widgets and canvas gestures call, checks the document after each, and saves screenshots:
 
 ```
 mkdir -p /tmp/shots
@@ -80,6 +97,8 @@ Undo is single-level, as in Photoshop 3: `undo()` and `redo()` toggle the last c
 | `ps/layer_commands.h` | `AddLayerCommand`, `RemoveLayerCommand`, `MoveLayerCommand`, `SetLayerOpacityCommand`, `SetLayerVisibleCommand`, `SetLayerOffsetCommand`, `SetLayerBlendCommand`, `SetLayerMaskCommand` |
 | `ps/pixel_commands.h` | `FillCommand`, `FillMaskCommand` |
 | `ps/canvas_commands.h` | `ResizeCanvasCommand`, `CropCommand`, `RotateCanvasCommand`, `FlipCanvasCommand` |
+| `ps/selection_commands.h` | `SelectRectCommand`, `SelectEllipseCommand`, `SelectPolygonCommand`, `MagicWandCommand`, `SelectAllCommand`, `DeselectCommand`, `InvertSelectionCommand`, `FeatherSelectionCommand` |
+| `ps/paint_commands.h` | `PaintStrokeCommand` (coverage from a `Stroke` in `ps/brush.h`), `BucketFillCommand` |
 
 Layer indices run bottom to top, so the background is 0. `editor.document()` is read-only: `layers()` to inspect, `flatten()` or `render(rect)` for the composite.
 

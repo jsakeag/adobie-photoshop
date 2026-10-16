@@ -8,24 +8,29 @@
 #include <nanogui/screen.h>
 
 #include "ps/editor.h"
+#include "ps/tools.h"
 
 class CanvasView;
 class LayersPanel;
+class ToolsPanel;
 namespace nanogui {
 class Label;
 }
 
-// The main window: canvas, Layers palette and status bar.
+// The main window: Tools palette, canvas, Layers palette and status bar.
 //
 // Every edit is a command run through editor_. The public actions are what
-// the widgets and shortcuts call, so the self-test can drive the same paths.
+// the widgets, shortcuts and canvas gestures call, so the self-test can
+// drive the same paths.
 class App : public nanogui::Screen {
  public:
   App();
 
   const ps::Editor& editor() const { return editor_; }
-  // The layer the palette controls act on (index, bottom to top).
+  // The layer the palettes and tools act on (index, bottom to top).
   std::size_t selected() const { return selected_; }
+  ps::ToolKind tool() const { return tool_kind_; }
+  ps::Color color() const { return settings_.color; }
   // The last error or note shown in the status bar; empty if none.
   const std::string& message() const { return message_; }
 
@@ -48,6 +53,25 @@ class App : public nanogui::Screen {
   void add_mask(bool reveal_all);
   void remove_mask();
 
+  // Tools palette.
+  void set_tool(ps::ToolKind kind);
+  void set_color(ps::Color color);
+  void set_brush(ps::BrushSettings brush);
+  void set_tolerance(int tolerance);
+  void set_paint_on_mask(bool on_mask);
+  void select_all();
+  void deselect();
+  void invert_selection();
+  void set_feather_radius(float radius);
+  void feather_selection();
+
+  // Canvas gestures, in document coordinates. Shift adds to a selection,
+  // Alt (Option) subtracts from it.
+  void tool_press(ps::Vec2 point, int modifiers);
+  void tool_drag(ps::Vec2 point);
+  void tool_release(ps::Vec2 point);
+  void tool_cancel();
+
   // Draws one frame and saves exactly what is on screen as a PNG.
   void capture(const std::string& path);
 
@@ -64,19 +88,32 @@ class App : public nanogui::Screen {
   void set_document(ps::Document document, const std::string& name);
   void open_dialog();
   void open_as_layer_dialog();
-  // Brings the canvas and palette up to date with the editor. Widgets are
-  // rebuilt here, outside their own callbacks.
+  bool paint_on_mask() const;
+  void pick_color(ps::Vec2 point);
+  // Brings the canvas and palettes up to date. Widgets are rebuilt here,
+  // outside their own callbacks.
   void refresh();
-  // Sizes the canvas and status bar; also docks the palette if asked.
-  void layout_widgets(bool place_panel);
+  void show_canvas();
+  // Sizes the canvas and status bar; also docks the palettes if asked.
+  void layout_widgets(bool place_palettes);
   void update_status();
 
   ps::Editor editor_{ps::Document(1, 1)};
   std::size_t selected_ = 0;
   std::string message_;
-  bool stale_ = true;  // canvas and palette need refresh()
+
+  ps::ToolKind tool_kind_ = ps::ToolKind::Brush;
+  std::unique_ptr<ps::Tool> tool_;
+  ps::ToolSettings settings_;  // colour, brush and tolerance; the rest is
+                               // filled in when a gesture starts
+  bool paint_on_mask_ = false;
+  float feather_radius_ = 5.0f;
+
+  bool canvas_stale_ = true;    // the picture needs redrawing
+  bool palettes_stale_ = true;  // the palettes need rebuilding
   std::string capture_path_;
   CanvasView* canvas_ = nullptr;
-  LayersPanel* panel_ = nullptr;
+  ToolsPanel* tools_ = nullptr;
+  LayersPanel* layers_ = nullptr;
   nanogui::Label* status_ = nullptr;
 };

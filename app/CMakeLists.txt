@@ -19,6 +19,7 @@ add_executable(mock_photoshop
   layers_panel.cpp
   main.cpp
   selftest.cpp
+  tools_panel.cpp
 )
 target_link_libraries(mock_photoshop PRIVATE ps_core nanogui)
 # Apple deprecates OpenGL; NanoGUI's backend and our screenshot code use it.

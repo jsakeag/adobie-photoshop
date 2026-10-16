@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include <nanogui/opengl.h>
 #include <nanogui/screen.h>
 #include <nanogui/texture.h>
 
@@ -45,11 +46,33 @@ void CanvasView::actual_size() {
 void CanvasView::zoom_in() { viewport_.zoom_in(view_center()); }
 void CanvasView::zoom_out() { viewport_.zoom_out(view_center()); }
 
-bool CanvasView::mouse_drag_event(const Vector2i& p, const Vector2i& rel,
-                                  int /* button */, int /* modifiers */) {
-  viewport_.pan({static_cast<double>(rel.x()), static_cast<double>(rel.y())});
+ps::Vec2 CanvasView::to_document(const Vector2i& p) const {
   const Vector2i local = p - m_pos;
-  cursor_ = viewport_.screen_to_doc({double(local.x()), double(local.y())});
+  return viewport_.screen_to_doc({double(local.x()), double(local.y())});
+}
+
+bool CanvasView::mouse_button_event(const Vector2i& p, int button, bool down,
+                                    int modifiers) {
+  nanogui::ImageView::mouse_button_event(p, button, down, modifiers);
+  if (button != GLFW_MOUSE_BUTTON_LEFT || !pointer_) return true;
+  if (down && !space_held_) {
+    gesture_ = true;
+    pointer_(PointerPhase::Press, to_document(p), modifiers);
+  } else if (!down && gesture_) {
+    gesture_ = false;
+    pointer_(PointerPhase::Release, to_document(p), modifiers);
+  }
+  return true;
+}
+
+bool CanvasView::mouse_drag_event(const Vector2i& p, const Vector2i& rel,
+                                  int /* button */, int modifiers) {
+  cursor_ = to_document(p);
+  if (gesture_) {
+    pointer_(PointerPhase::Drag, cursor_, modifiers);
+    return true;
+  }
+  viewport_.pan({static_cast<double>(rel.x()), static_cast<double>(rel.y())});
   return true;
 }
 

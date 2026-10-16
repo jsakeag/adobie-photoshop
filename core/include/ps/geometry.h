@@ -4,6 +4,12 @@
 
 namespace ps {
 
+// A position in continuous coordinates, such as the mouse in the document.
+struct Vec2 {
+  double x = 0.0;
+  double y = 0.0;
+};
+
 struct Point {
   int x = 0;
   int y = 0;
@@ -19,6 +25,9 @@ struct Rect {
   int right() const { return x + width; }
   int bottom() const { return y + height; }
   bool empty() const { return width <= 0 || height <= 0; }
+  bool contains(Point p) const {
+    return p.x >= x && p.y >= y && p.x < right() && p.y < bottom();
+  }
 
   Rect intersect(const Rect& o) const {
     const int x0 = std::max(x, o.x);

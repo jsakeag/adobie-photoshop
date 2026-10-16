@@ -7,9 +7,12 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "golden.h"
+#include "ps/brush.h"
 #include "ps/canvas_commands.h"
 #include "ps/layer_commands.h"
+#include "ps/paint_commands.h"
 #include "ps/pixel_commands.h"
+#include "ps/selection_commands.h"
 #include "state_checks.h"
 
 using namespace ps;
@@ -27,7 +30,8 @@ Layer solid(const char* name, Rect area, Color c) {
   return layer;
 }
 
-// A 4x3-tile document: test pattern background, small masked red layer.
+// A 4x3-tile document: test pattern background, small masked red layer,
+// and a rectangular selection.
 Document sample() {
   Document doc(make_test_pattern(4 * kT, 3 * kT));
   Layer red = solid("red", {0, 0, 40, 20}, kRed);
@@ -35,7 +39,23 @@ Document sample() {
   red.mask = MaskGrid(255);
   red.mask->fill({20, 0, 20, 20}, 0);
   doc.add_layer(1, red);
+  doc.set_selection(rect_mask({20, 20, 2 * kT, kT}));
   return doc;
+}
+
+// Brush-like coverage crossing the selection's edge.
+MaskGrid streak() {
+  Stroke stroke(BrushSettings{});
+  stroke.add_point({10, 30});
+  stroke.add_point({kT + 40, kT + 25});
+  return stroke.coverage();
+}
+
+// What the bucket does, worked out directly.
+void bucket(Document& d, Point seed) {
+  const Image pixels = d.layers().at(0).pixels.read(d.bounds());
+  paint_coverage(d, 0, PaintTarget::Pixels, flood_mask(pixels, {0, 0}, seed, 12),
+                 kBlue, 1.0f, false);
 }
 
 // A command paired with the direct Document calls it should be equal to.
@@ -106,6 +126,77 @@ std::vector<Case> all_cases() {
       {"Flip Canvas",
        [] { return std::make_unique<FlipCanvasCommand>(FlipAxis::Vertical); },
        [](Document& d) { d.flip_vertical(); }},
+      {"Rectangular Marquee",
+       [] {
+         return std::make_unique<SelectRectCommand>(Rect{5, 5, 30, 30},
+                                                    SelectionOp::Add);
+       },
+       [](Document& d) {
+         d.set_selection(combine_selection(d.selection(), rect_mask({5, 5, 30, 30}),
+                                           SelectionOp::Add));
+       }},
+      {"Elliptical Marquee",
+       [] {
+         return std::make_unique<SelectEllipseCommand>(Rect{5, 5, 60, 30},
+                                                       SelectionOp::Replace);
+       },
+       [](Document& d) { d.set_selection(ellipse_mask({5, 5, 60, 30})); }},
+      {"Lasso",
+       [] {
+         return std::make_unique<SelectPolygonCommand>(
+             std::vector<Vec2>{{0, 0}, {90, 10}, {40, 70}}, SelectionOp::Subtract);
+       },
+       [](Document& d) {
+         d.set_selection(combine_selection(
+             d.selection(), polygon_mask({{0, 0}, {90, 10}, {40, 70}}),
+             SelectionOp::Subtract));
+       }},
+      {"Magic Wand",
+       [] {
+         return std::make_unique<MagicWandCommand>(1, Point{kT + 15, kT + 15}, 0,
+                                                   SelectionOp::Replace);
+       },
+       [](Document& d) { d.set_selection(rect_mask({kT + 10, kT + 10, 40, 20})); }},
+      {"Select All", [] { return std::make_unique<SelectAllCommand>(); },
+       [](Document& d) { d.set_selection(rect_mask(d.bounds())); }},
+      {"Deselect", [] { return std::make_unique<DeselectCommand>(); },
+       [](Document& d) { d.set_selection(std::nullopt); }},
+      {"Inverse", [] { return std::make_unique<InvertSelectionCommand>(); },
+       [](Document& d) { d.set_selection(inverted(*d.selection())); }},
+      {"Feather", [] { return std::make_unique<FeatherSelectionCommand>(5.0f); },
+       [](Document& d) { d.set_selection(feathered(*d.selection(), 5.0f)); }},
+      {"Paintbrush",
+       [] {
+         return std::make_unique<PaintStrokeCommand>(0, PaintTarget::Pixels,
+                                                     streak(), kBlue, 0.7f, false);
+       },
+       [](Document& d) {
+         paint_coverage(d, 0, PaintTarget::Pixels, streak(), kBlue, 0.7f, false);
+       }},
+      {"Eraser",
+       [] {
+         return std::make_unique<PaintStrokeCommand>(0, PaintTarget::Pixels,
+                                                     streak(), kBlue, 1.0f, true);
+       },
+       [](Document& d) {
+         paint_coverage(d, 0, PaintTarget::Pixels, streak(), kBlue, 1.0f, true);
+       }},
+      {"Paintbrush",
+       [] {
+         return std::make_unique<PaintStrokeCommand>(1, PaintTarget::Mask,
+                                                     rect_mask({0, 0, 999, 999}),
+                                                     kBlack, 1.0f, false);
+       },
+       [](Document& d) {
+         paint_coverage(d, 1, PaintTarget::Mask, rect_mask({0, 0, 999, 999}),
+                        kBlack, 1.0f, false);
+       }},
+      {"Paint Bucket",
+       [] {
+         return std::make_unique<BucketFillCommand>(0, PaintTarget::Pixels,
+                                                    Point{30, 30}, kBlue, 12, 1.0f);
+       },
+       [](Document& d) { bucket(d, {30, 30}); }},
   };
 }
 
@@ -262,4 +353,48 @@ TEST_CASE("Undoing a small edit recomposites only its tiles", "[commands]") {
   fill.redo(doc);
   doc.flatten();
   CHECK(doc.compositor().tiles_composited() == start + 3);
+}
+
+TEST_CASE("Selection commands need a selection where it matters",
+          "[commands][selection]") {
+  Document doc(40, 40);
+  const DocumentState before = doc.snapshot();
+  InvertSelectionCommand invert;
+  FeatherSelectionCommand feather(3.0f);
+  CHECK_THROWS_AS(invert.execute(doc), std::logic_error);
+  CHECK_THROWS_AS(feather.execute(doc), std::logic_error);
+  CHECK(same_state(doc.snapshot(), before));
+}
+
+TEST_CASE("Seeds outside the canvas change nothing", "[commands][selection]") {
+  Document doc = sample();
+  const DocumentState before = doc.snapshot();
+  MagicWandCommand wand(0, {-1, 5}, 255, SelectionOp::Replace);
+  wand.execute(doc);
+  BucketFillCommand fill(0, PaintTarget::Pixels, {5, 3 * kT}, kBlue, 255, 1.0f);
+  fill.execute(doc);
+  CHECK(same_state(doc.snapshot(), before));
+}
+
+TEST_CASE("The selection survives undo and canvas changes deselect",
+          "[commands][selection]") {
+  Document doc = sample();
+  REQUIRE(doc.selection());
+  RotateCanvasCommand rotate(Rotation::CW90);
+  rotate.execute(doc);
+  CHECK_FALSE(doc.selection());
+  rotate.undo(doc);
+  REQUIRE(doc.selection());
+  CHECK(*doc.selection() == rect_mask({20, 20, 2 * kT, kT}));
+}
+
+TEST_CASE("Changing the selection does not recomposite", "[commands][selection]") {
+  Document doc = sample();
+  doc.flatten();
+  const std::size_t before = doc.compositor().tiles_composited();
+  SelectAllCommand all;
+  all.execute(doc);
+  all.undo(doc);
+  doc.flatten();
+  CHECK(doc.compositor().tiles_composited() == before);
 }

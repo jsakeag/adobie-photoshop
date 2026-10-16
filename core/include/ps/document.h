@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <utility>
 
 #include "ps/compositor.h"
 #include "ps/image.h"
@@ -29,6 +30,7 @@ struct DocumentState {
   int width = 0;
   int height = 0;
   LayerStack layers;
+  std::optional<MaskGrid> selection;
 };
 
 // An open image: a canvas size and a stack of layers.
@@ -49,9 +51,18 @@ class Document {
 
   const LayerStack& layers() const { return layers_; }
 
-  DocumentState snapshot() const { return {width_, height_, layers_}; }
+  DocumentState snapshot() const {
+    return {width_, height_, layers_, selection_};
+  }
   // Puts back a snapshot, recompositing only the tiles that differ.
   void restore(const DocumentState& state);
+
+  // In document coordinates; std::nullopt means nothing is selected, so
+  // edits apply everywhere. Painting and fills are limited to it.
+  const std::optional<MaskGrid>& selection() const { return selection_; }
+  void set_selection(std::optional<MaskGrid> selection) {
+    selection_ = std::move(selection);
+  }
 
   // Inserts below the layer currently at `index`; layers().size() adds on top.
   void add_layer(std::size_t index, Layer layer);
@@ -76,6 +87,8 @@ class Document {
   Image flatten() const { return render(bounds()); }
   const Compositor& compositor() const { return compositor_; }
 
+  // The canvas operations below also deselect, as Photoshop's Crop does.
+
   // Canvas Size: grows or trims around the anchor. New canvas area is filled
   // with `fill` on the bottom layer; layers keep pixels that fall outside.
   void resize_canvas(int width, int height, Anchor anchor = Anchor::Center,
@@ -97,6 +110,7 @@ class Document {
   int width_ = 0;
   int height_ = 0;
   LayerStack layers_;
+  std::optional<MaskGrid> selection_;
   mutable Compositor compositor_;
 };
 
