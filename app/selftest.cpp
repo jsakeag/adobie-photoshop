@@ -8,6 +8,7 @@
 #include <nanogui/opengl.h>
 
 #include "app.h"
+#include "ps/adjustments.h"
 #include "ps/blend.h"
 #include "ps/tools.h"
 
@@ -176,6 +177,41 @@ int run_selftest(const std::string& out_dir, const std::string& base_image,
     app->toggle_undo();
     check(doc().layers().at(1).pixels.pixel(150, 20).a == 0,
           "and redo erases again");
+
+    // Milestone 6: adjustments with live preview.
+    check(app->open(base_image), "reopen for adjustments");
+    const ps::Color sky_before = pixel(300, 50);
+    app->preview_adjustment(ps::Levels{});
+    app->preview_adjustment(ps::Levels{60, 255, 1.0f, 0, 255});
+    check(app->previewing_adjustment() && pixel(300, 50) == sky_before &&
+              !app->editor().can_undo(),
+          "a previewed adjustment leaves the document alone");
+    shot("12_levels_preview");
+    app->apply_adjustment();
+    check(!app->previewing_adjustment() && app->editor().undo_name() == "Levels",
+          "Apply makes one Levels step");
+    check(pixel(300, 50) != sky_before, "and changes the picture");
+
+    app->preview_adjustment(ps::BrightnessContrast{80, 0});
+    app->cancel_adjustment();
+    check(!app->previewing_adjustment() && app->editor().undo_name() == "Levels",
+          "Cancel drops the preview");
+
+    app->set_tool(ps::ToolKind::RectMarquee);
+    stroke({0, 0}, {320, 420});
+    const ps::Color left = pixel(100, 380), right = pixel(500, 380);
+    app->preview_adjustment(ps::HueSaturation{});
+    app->preview_adjustment(ps::HueSaturation{180, 0, 0});
+    shot("13_hue_preview_in_selection");
+    app->apply_adjustment();
+    check(pixel(100, 380) != left && pixel(500, 380) == right,
+          "Hue/Saturation changes only the selection");
+    app->preview_adjustment(ps::Invert{});
+    app->apply_adjustment();
+    check(app->editor().undo_name() == "Invert", "Invert applies without settings");
+    shot("14_after_invert");
+    app->toggle_undo();
+    check(app->editor().redo_name() == "Invert", "and undoes");
   }
   nanogui::shutdown();
   std::printf("%s\n", failures == 0 ? "selftest passed" : "selftest FAILED");

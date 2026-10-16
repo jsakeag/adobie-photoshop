@@ -10,6 +10,7 @@ FetchContent_MakeAvailable(Catch2)
 
 add_executable(ps_tests
   golden.cpp
+  test_adjustments.cpp
   test_blend.cpp
   test_brush.cpp
   test_commands.cpp

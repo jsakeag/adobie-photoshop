@@ -10,8 +10,10 @@
 #include <nanogui/label.h>
 #include <nanogui/opengl.h>
 
+#include "adjust_panel.h"
 #include "canvas_view.h"
 #include "layers_panel.h"
+#include "ps/adjust_commands.h"
 #include "ps/image_io.h"
 #include "ps/layer_commands.h"
 #include "ps/selection_commands.h"
@@ -73,6 +75,12 @@ App::App() : nanogui::Screen(nanogui::Vector2i(1280, 800), "Mock Photoshop") {
   actions.add_mask = [this](bool reveal) { add_mask(reveal); };
   actions.remove_mask = [this] { remove_mask(); };
   layers_ = new LayersPanel(this, std::move(actions));
+
+  AdjustPanelActions adjust_actions;
+  adjust_actions.preview = [this](const ps::Adjustment& a) { preview_adjustment(a); };
+  adjust_actions.apply = [this] { apply_adjustment(); };
+  adjust_actions.cancel = [this] { cancel_adjustment(); };
+  adjust_ = new AdjustPanel(this, std::move(adjust_actions));
 
   layout_widgets(true);  // before set_document, so the canvas can fit
   set_document(ps::Document(640, 480), "Untitled");
@@ -227,7 +235,42 @@ void App::pick_color(ps::Vec2 point) {
   set_color(c);
 }
 
+void App::preview_adjustment(const ps::Adjustment& adjustment) {
+  tool_cancel();
+  // Rebuild the palettes only for a new kind: a slider being dragged must
+  // keep its widget.
+  if (adjustment.index() != adjustment_.index()) palettes_stale_ = true;
+  adjustment_ = adjustment;
+  pending_ = adjustment;
+  canvas_stale_ = true;
+}
+
+void App::apply_adjustment() {
+  // Invert has no sliders, so Apply is how it is used; the others with
+  // untouched sliders would be an empty undo step.
+  if (!pending_ && !std::holds_alternative<ps::Invert>(adjustment_)) return;
+  if (!pending_) pending_ = adjustment_;
+  const ps::Adjustment adjustment = *pending_;
+  pending_.reset();
+  run(std::make_unique<ps::AdjustCommand>(selected_, adjustment));
+  cancel_adjustment();  // back to the defaults for the next one
+}
+
+void App::cancel_adjustment() {
+  pending_.reset();
+  // A fresh adjustment of the same kind.
+  switch (adjustment_.index()) {
+    case 0: adjustment_ = ps::Levels{}; break;
+    case 1: adjustment_ = ps::Curves{{{0, 0}, {64, 64}, {128, 128}, {192, 192}, {255, 255}}}; break;
+    case 2: adjustment_ = ps::BrightnessContrast{}; break;
+    case 3: adjustment_ = ps::HueSaturation{}; break;
+    default: adjustment_ = ps::Invert{}; break;
+  }
+  canvas_stale_ = palettes_stale_ = true;
+}
+
 void App::tool_press(ps::Vec2 point, int modifiers) {
+  if (pending_) cancel_adjustment();  // tools work on the real document
   if (tool_kind_ == ps::ToolKind::Eyedropper) {
     pick_color(point);
     return;
@@ -323,6 +366,7 @@ void App::refresh() {
     state.feather_radius = feather_radius_;
     tools_->refresh(state);
     layers_->refresh(editor_, selected_);
+    adjust_->show(adjustment_);
     perform_layout();
     layout_widgets(false);  // perform_layout resized the canvas; the user may
                             // have dragged the palettes, so leave them there
@@ -330,17 +374,21 @@ void App::refresh() {
 }
 
 void App::show_canvas() {
-  // While a gesture is under way, show what its command would do, run on a
+  // Show what a pending adjustment or a gesture under way would do, run on a
   // copy of the document (cheap: the copy shares every tile).
+  std::unique_ptr<ps::Command> command;
+  if (pending_ && selected_ < editor_.document().layers().size()) {
+    command = std::make_unique<ps::AdjustCommand>(selected_, *pending_);
+  } else if (tool_ && tool_->active()) {
+    command = tool_->command();
+  }
   std::optional<ps::Document> preview;
-  if (tool_ && tool_->active()) {
-    if (std::unique_ptr<ps::Command> command = tool_->command()) {
-      preview = editor_.document();
-      try {
-        command->execute(*preview);
-      } catch (const std::exception&) {
-        preview.reset();
-      }
+  if (command) {
+    preview = editor_.document();
+    try {
+      command->execute(*preview);
+    } catch (const std::exception&) {
+      preview.reset();
     }
   }
   const ps::Document& shown = preview ? *preview : editor_.document();
@@ -447,6 +495,12 @@ void App::layout_widgets(bool place_palettes) {
   if (place_palettes) {
     tools_->set_position({0, 0});
     layers_->set_position({left + canvas_width, 0});
+  }
+  // The Adjustments palette sits under the Layers palette while it is docked
+  // there, moving down as the layer list grows.
+  if (place_palettes || adjust_->position().x() == left + canvas_width) {
+    adjust_->set_position(
+        {left + canvas_width, layers_->position().y() + layers_->height() + 6});
   }
   status_->set_position({8, size.y() - kStatusHeight + 4});
   status_->set_size({size.x() - 16, kStatusHeight - 4});

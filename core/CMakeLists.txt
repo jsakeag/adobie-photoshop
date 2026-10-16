@@ -1,4 +1,6 @@
 add_library(ps_core STATIC
+  src/adjust_commands.cpp
+  src/adjustments.cpp
   src/blend.cpp
   src/brush.cpp
   src/command.cpp

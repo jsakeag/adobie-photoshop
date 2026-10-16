@@ -14,6 +14,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nanogui)
 
 add_executable(mock_photoshop
+  adjust_panel.cpp
   app.cpp
   canvas_view.cpp
   layers_panel.cpp

@@ -2,14 +2,17 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <nanogui/screen.h>
 
+#include "ps/adjustments.h"
 #include "ps/editor.h"
 #include "ps/tools.h"
 
+class AdjustPanel;
 class CanvasView;
 class LayersPanel;
 class ToolsPanel;
@@ -65,6 +68,13 @@ class App : public nanogui::Screen {
   void set_feather_radius(float radius);
   void feather_selection();
 
+  // Adjustments palette. A previewed adjustment shows on the canvas until
+  // it is applied (one command on the selected layer) or cancelled.
+  void preview_adjustment(const ps::Adjustment& adjustment);
+  void apply_adjustment();
+  void cancel_adjustment();
+  bool previewing_adjustment() const { return pending_.has_value(); }
+
   // Canvas gestures, in document coordinates. Shift adds to a selection,
   // Alt (Option) subtracts from it.
   void tool_press(ps::Vec2 point, int modifiers);
@@ -107,6 +117,8 @@ class App : public nanogui::Screen {
   ps::ToolSettings settings_;  // colour, brush and tolerance; the rest is
                                // filled in when a gesture starts
   bool paint_on_mask_ = false;
+  ps::Adjustment adjustment_ = ps::Levels{};  // what the palette shows
+  std::optional<ps::Adjustment> pending_;     // previewed, not yet applied
   float feather_radius_ = 5.0f;
 
   bool canvas_stale_ = true;    // the picture needs redrawing
@@ -115,5 +127,6 @@ class App : public nanogui::Screen {
   CanvasView* canvas_ = nullptr;
   ToolsPanel* tools_ = nullptr;
   LayersPanel* layers_ = nullptr;
+  AdjustPanel* adjust_ = nullptr;
   nanogui::Label* status_ = nullptr;
 };

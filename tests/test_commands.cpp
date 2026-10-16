@@ -8,6 +8,7 @@
 
 #include "golden.h"
 #include "ps/brush.h"
+#include "ps/adjust_commands.h"
 #include "ps/canvas_commands.h"
 #include "ps/layer_commands.h"
 #include "ps/paint_commands.h"
@@ -197,6 +198,27 @@ std::vector<Case> all_cases() {
                                                     Point{30, 30}, kBlue, 12, 1.0f);
        },
        [](Document& d) { bucket(d, {30, 30}); }},
+      {"Levels",
+       [] { return std::make_unique<AdjustCommand>(0, Levels{30, 220, 1.3f, 0, 255}); },
+       [](Document& d) {
+         // Outside the selection nothing changes; inside, the levels table.
+         const Lut lut = levels_lut({30, 220, 1.3f, 0, 255});
+         const Rect sel{20, 20, 2 * kT, kT};
+         Image image = d.layers().at(0).pixels.read(sel);
+         for (int y = 0; y < sel.height; ++y) {
+           for (int x = 0; x < sel.width; ++x) {
+             const Color c = image.pixel(x, y);
+             image.set_pixel(x, y, {lut[c.r], lut[c.g], lut[c.b], c.a});
+           }
+         }
+         d.edit_layer_pixels(0, sel).write(image, {sel.x, sel.y});
+       }},
+      {"Invert", [] { return std::make_unique<AdjustCommand>(1, Invert{}); },
+       [](Document& d) {
+         // The selection ends at document row 84, ten rows into the layer.
+         d.edit_layer_pixels(1, {0, 0, 40, 10})
+             .fill({0, 0, 40, 10}, {0, 255, 255, 255});
+       }},
   };
 }
 
