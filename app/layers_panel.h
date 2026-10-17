@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <vector>
 
 #include <nanogui/window.h>
 
@@ -26,6 +27,7 @@ struct LayersPanelActions {
   std::function<void()> delete_layer;
   std::function<void()> raise_layer;
   std::function<void()> lower_layer;
+  std::function<void(std::size_t from, std::size_t to)> move_layer;
   std::function<void()> open_as_layer;
   std::function<void(bool reveal)> add_mask;
   std::function<void()> remove_mask;
@@ -43,6 +45,12 @@ class LayersPanel : public nanogui::Window {
   // one of the panel's own callbacks: it deletes and recreates widgets.
   void refresh(const ps::Editor& editor, std::size_t selected);
 
+  // Where a layer's row is on screen (window coordinates), for the
+  // self-test to drag it.
+  nanogui::Vector2i row_center(std::size_t index) const;
+  // Opens or closes the blend mode menu, for the self-test's screenshots.
+  void open_blend_menu(bool open);
+
  private:
   LayersPanelActions actions_;
   nanogui::Button* undo_ = nullptr;
@@ -56,4 +64,5 @@ class LayersPanel : public nanogui::Window {
   nanogui::Button* reveal_mask_ = nullptr;
   nanogui::Button* hide_mask_ = nullptr;
   nanogui::Button* remove_mask_ = nullptr;
+  std::vector<int> thumbnails_;  // NanoVG images for the rows
 };

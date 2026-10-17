@@ -16,6 +16,7 @@ add_library(ps_core STATIC
   src/native_format.cpp
   src/paint.cpp
   src/selection.cpp
+  src/thumbnail.cpp
   src/tile_grid.cpp
   src/tools.cpp
   src/transform.cpp

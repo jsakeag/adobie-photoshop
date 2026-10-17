@@ -2,7 +2,7 @@
 
 A raster image editor modeled on Photoshop 3.0-4.0, written in C++17. The core is headless; a thin NanoGUI app shows the result. See [CLAUDE.md](CLAUDE.md) for the plan and architecture.
 
-**Status:** milestones 1-9 are done: canvas, layers and compositor, blend modes and masks, commands and undo, selection and paint tools, adjustments, filters, transforms, and saving, all usable from the app. Next is UI polish (milestone 10).
+**Status:** all ten tier 1 milestones are done: canvas, layers and compositor, blend modes and masks, commands and undo, selection and paint tools, adjustments, filters, transforms, saving, and UI polish, all usable from the app. Wanted next: a Move tool and trackpad panning (see CLAUDE.md, Bonus features).
 
 ## Build and test
 
@@ -24,11 +24,11 @@ Add `-DPS_BUILD_APP=OFF` to the first command to skip the NanoGUI app.
 - **View:** scroll to zoom; drag with the right button, or hold Space and drag, to pan. Cmd with `=`, `-`, `0`, `1` zooms in, out, fits, or goes to 100%.
 - **File** (buttons at the top of the Tools palette):
   - **Open...** (Cmd+O, or drop a file on the window) opens a `.mps` document or a PNG/JPEG/BMP/TGA/GIF image, replacing the current document.
-  - **Save** (Cmd+S) writes the native `.mps` format, keeping layers, masks, blend modes and opacity; **Save As...** (Cmd+Shift+S) picks a new file. A `*` in the title bar means unsaved changes. There is no warning before opening another file over unsaved work.
+  - **Save** (Cmd+S) writes the native `.mps` format, keeping layers, masks, blend modes and opacity; **Save As...** (Cmd+Shift+S) picks a new file. A `*` in the title bar means unsaved changes; opening another file asks before discarding them.
   - **Export...** (Cmd+E) writes the composite as PNG (with transparency) or JPEG (flattened onto white).
 - **Undo:** Cmd+Z, or the button at the top of the Layers palette. Undo is single-level as in Photoshop 3: Cmd+Z again redoes.
 - **Layers palette** (right side; drag its title bar to move it):
-  - The list shows the top layer first. Click a name to select it; the checkbox shows or hides it. `[mask]` marks a layer with a mask.
+  - The list shows the top layer first, each with a thumbnail. Click a row to select it, drag it up or down to reorder; the checkbox shows or hides it. `[mask]` marks a layer with a mask.
   - The blend mode menu and opacity slider act on the selected layer.
   - **New** adds an empty layer above the selection, **Delete** removes the selection (not the last layer), **Up**/**Down** reorder.
   - **Open Image as Layer...** adds a file as a new layer, centred on the canvas. This is the way to get a second image in to try blend modes.
@@ -53,7 +53,6 @@ Add `-DPS_BUILD_APP=OFF` to the first command to skip the NanoGUI app.
   - Esc cancels a drag in progress. Every stroke, fill and selection change is one undo step.
 - **Image palette** (under the Layers palette): pick from the **Adjust...** menu (Levels, Curves, Brightness/Contrast, Hue/Saturation, Invert), the **Filter...** menu (Gaussian Blur, Unsharp Mask, Add Noise, Motion Blur) or the **Transform...** menu (Image Size, Canvas Size, Scale/Rotate Layer). Moving a slider previews the result on the canvas; **Apply** makes it one undo step, **Cancel** drops it. Adjustments and filters change the selected layer, only within the selection if there is one. Curves here are three sliders for the output at inputs 64, 128 and 192.
   - **Image Size** resamples the whole document (aspect kept, bicubic); **Canvas Size** adds or trims canvas around an anchor; **Scale/Rotate Layer** scales and turns the selected layer about its centre (bilinear while previewing, bicubic on Apply).
-- **Known issue:** the blend mode menu in the Layers palette opens off the right edge of the window, so it can't be seen. It needs a one-line code fix (see CLAUDE.md).
 
 To check the GUI without clicking through it, `--selftest` runs the same actions the widgets and canvas gestures call, checks the document after each, and saves screenshots:
 

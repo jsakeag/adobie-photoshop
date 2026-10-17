@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -19,6 +20,7 @@ class LayersPanel;
 class ToolsPanel;
 namespace nanogui {
 class Label;
+class MessageDialog;
 }
 
 // The main window: Tools palette, canvas, Layers palette and status bar.
@@ -41,6 +43,9 @@ class App : public nanogui::Screen {
   // File. Return false and show the error in the status bar on failure.
   // open() reads .mps documents or PNG/JPEG/... images.
   bool open(const std::string& path);
+  // open(), after asking first if there are unsaved changes. Dropped files
+  // and the Open dialog go through this.
+  void request_open(const std::string& path);
   bool open_as_layer(const std::string& path);
   // Saves as .mps (adding the extension if missing) and remembers the path.
   bool save_to(const std::string& path);
@@ -61,6 +66,8 @@ class App : public nanogui::Screen {
   void delete_layer();
   void raise_layer();
   void lower_layer();
+  // Drag-reorder in the palette: the layer at `from` ends up at `to`.
+  void move_layer(std::size_t from, std::size_t to);
   void add_mask(bool reveal_all);
   void remove_mask();
 
@@ -101,6 +108,15 @@ class App : public nanogui::Screen {
   // Draws one frame and saves exactly what is on screen as a PNG.
   void capture(const std::string& path);
 
+  // For the self-test: drives the real mouse event path with a left-button
+  // drag between two window positions, and answers the unsaved-changes
+  // prompt as the user would.
+  void simulate_drag(nanogui::Vector2i from, nanogui::Vector2i to);
+  nanogui::Vector2i layer_row_center(std::size_t index) const;
+  bool discard_prompt_open() const { return prompt_ != nullptr; }
+  void open_blend_menu(bool open);
+  void answer_discard_prompt(bool discard);
+
   bool keyboard_event(int key, int scancode, int action, int modifiers) override;
   bool drop_event(const std::vector<std::string>& filenames) override;
   bool resize_event(const nanogui::Vector2i& size) override;
@@ -114,6 +130,8 @@ class App : public nanogui::Screen {
   void set_document(ps::Document document, const std::string& name);
   void open_dialog();
   void open_as_layer_dialog();
+  // Runs `then` now, or after the user agrees to drop unsaved changes.
+  void confirm_discard(std::function<void()> then);
   void save();  // to the remembered path, or ask for one
   void save_as_dialog();
   void export_dialog();
@@ -136,6 +154,8 @@ class App : public nanogui::Screen {
   std::uint64_t changes_ = 0;        // counts edits, undos and redos
   std::uint64_t saved_changes_ = 0;  // changes_ when last opened or saved
   std::string caption_;              // what the title bar shows now
+  nanogui::MessageDialog* prompt_ = nullptr;  // the open unsaved-changes prompt
+  std::function<void()> after_prompt_;        // what Discard goes on to do
 
   ps::ToolKind tool_kind_ = ps::ToolKind::Brush;
   std::unique_ptr<ps::Tool> tool_;

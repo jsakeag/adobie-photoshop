@@ -321,6 +321,41 @@ int run_selftest(const std::string& out_dir, const std::string& base_image,
     check(!app->open(out_dir + "/selftest_export.png.mps") && !app->message().empty(),
           "opening a missing .mps shows an error");
     shot("23_error");
+
+    // Milestone 10: thumbnails, drag-reorder through real mouse events, the
+    // blend menu on screen, and the unsaved-changes prompt.
+    check(app->open(saved + ".mps"), "reopen for polish checks");
+    app->new_layer();  // three layers: Background, selftest_layer, Layer 2
+    app->capture(out_dir + "/24_layers_with_thumbnails.png");
+    app->simulate_drag(app->layer_row_center(2), app->layer_row_center(0));
+    check(doc().layers().at(0).name == "Layer 2" && app->selected() == 0,
+          "dragging the top row to the bottom moves the layer down the stack");
+    app->capture(out_dir + "/25_after_drag.png");
+    app->simulate_drag(app->layer_row_center(0), app->layer_row_center(1));
+    check(doc().layers().at(1).name == "Layer 2", "and one row back up");
+    const auto before_click = app->selected();
+    app->simulate_drag(app->layer_row_center(2), app->layer_row_center(2));
+    check(app->selected() == 2 && before_click != 2, "a click on a row selects it");
+
+    app->set_blend(ps::BlendMode::Screen);  // marks the document unsaved
+    app->select_layer(2);
+    check(app->dirty(), "unsaved before the prompt test");
+    app->request_open(saved + ".mps");
+    check(app->discard_prompt_open(), "Open asks before discarding changes");
+    shot("26_unsaved_prompt");
+    shot("26_unsaved_prompt");
+    app->answer_discard_prompt(false);
+    check(!app->discard_prompt_open() && app->dirty() &&
+              doc().layers().at(2).blend == ps::BlendMode::Screen,
+          "Cancel keeps the document");
+    app->request_open(saved + ".mps");
+    app->answer_discard_prompt(true);
+    check(!app->dirty() && doc().layers().size() == 2, "Discard opens the file");
+    app->set_blend(ps::BlendMode::Multiply);
+    app->open_blend_menu(true);
+    shot("27_blend_menu_open");
+    shot("27_blend_menu_open");
+    app->open_blend_menu(false);
   }
   nanogui::shutdown();
   std::printf("%s\n", failures == 0 ? "selftest passed" : "selftest FAILED");

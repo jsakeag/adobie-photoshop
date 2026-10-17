@@ -14,6 +14,7 @@ add_executable(ps_tests
   test_blend.cpp
   test_brush.cpp
   test_commands.cpp
+  test_definition_of_done.cpp
   test_compositor.cpp
   test_document.cpp
   test_document_layers.cpp
@@ -28,6 +29,7 @@ add_executable(ps_tests
   test_native_format.cpp
   test_paint.cpp
   test_selection.cpp
+  test_thumbnail.cpp
   test_tile_grid.cpp
   test_tools.cpp
   test_transform.cpp

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include <nanogui/label.h>
+#include <nanogui/messagedialog.h>
 #include <nanogui/opengl.h>
 
 #include "canvas_view.h"
@@ -83,6 +84,7 @@ App::App() : nanogui::Screen(nanogui::Vector2i(1280, 800), "Mock Photoshop") {
   actions.delete_layer = [this] { delete_layer(); };
   actions.raise_layer = [this] { raise_layer(); };
   actions.lower_layer = [this] { lower_layer(); };
+  actions.move_layer = [this](std::size_t from, std::size_t to) { move_layer(from, to); };
   actions.open_as_layer = [this] { open_as_layer_dialog(); };
   actions.add_mask = [this](bool reveal) { add_mask(reveal); };
   actions.remove_mask = [this] { remove_mask(); };
@@ -183,6 +185,10 @@ void App::raise_layer() {
   if (run(std::make_unique<ps::MoveLayerCommand>(selected_, selected_ + 1))) {
     ++selected_;
   }
+}
+
+void App::move_layer(std::size_t from, std::size_t to) {
+  if (run(std::make_unique<ps::MoveLayerCommand>(from, to))) selected_ = to;
 }
 
 void App::lower_layer() {
@@ -425,10 +431,56 @@ void App::update_caption() {
   }
 }
 
+void App::confirm_discard(std::function<void()> then) {
+  if (!dirty()) {
+    then();
+    return;
+  }
+  if (prompt_) return;  // already asking
+  after_prompt_ = std::move(then);
+  prompt_ = new nanogui::MessageDialog(
+      this, nanogui::MessageDialog::Type::Warning, "Unsaved changes",
+      "Discard the changes to " + doc_name_ + "?", "Discard", "Cancel", true);
+  prompt_->set_callback([this](int choice) {
+    prompt_ = nullptr;  // the dialog disposes of itself after this
+    std::function<void()> then = std::move(after_prompt_);
+    after_prompt_ = nullptr;
+    if (choice == 0 && then) then();
+  });
+}
+
+void App::answer_discard_prompt(bool discard) {
+  if (!prompt_) return;
+  nanogui::MessageDialog* dialog = prompt_;
+  dialog->callback()(discard ? 0 : 1);
+  dialog->dispose();
+}
+
+void App::simulate_drag(nanogui::Vector2i from, nanogui::Vector2i to) {
+  cursor_pos_callback_event(from.x(), from.y());
+  mouse_button_callback_event(GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
+  for (int i = 1; i <= 8; ++i) {
+    cursor_pos_callback_event(from.x() + (to.x() - from.x()) * i / 8.0,
+                              from.y() + (to.y() - from.y()) * i / 8.0);
+  }
+  mouse_button_callback_event(GLFW_MOUSE_BUTTON_LEFT, GLFW_RELEASE, 0);
+}
+
+void App::open_blend_menu(bool open) {
+  layers_->open_blend_menu(open);
+  palettes_stale_ = true;
+}
+
+nanogui::Vector2i App::layer_row_center(std::size_t index) const {
+  return layers_->row_center(index);
+}
+
 void App::open_dialog() {
-  const std::vector<std::string> paths =
-      nanogui::file_dialog(this, nanogui::FileDialogType::Open, kOpenTypes);
-  if (!paths.empty()) open(paths.front());
+  confirm_discard([this] {
+    const std::vector<std::string> paths =
+        nanogui::file_dialog(this, nanogui::FileDialogType::Open, kOpenTypes);
+    if (!paths.empty()) open(paths.front());
+  });
 }
 
 void App::open_as_layer_dialog() {
@@ -544,8 +596,14 @@ bool App::keyboard_event(int key, int scancode, int action, int modifiers) {
   }
 }
 
+void App::request_open(const std::string& path) {
+  confirm_discard([this, path] { open(path); });
+}
+
 bool App::drop_event(const std::vector<std::string>& filenames) {
-  return !filenames.empty() && open(filenames.front());
+  if (filenames.empty()) return false;
+  request_open(filenames.front());
+  return true;
 }
 
 bool App::resize_event(const nanogui::Vector2i& size) {
