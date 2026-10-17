@@ -10,6 +10,7 @@
 #include "ps/brush.h"
 #include "ps/adjust_commands.h"
 #include "ps/canvas_commands.h"
+#include "ps/filter_commands.h"
 #include "ps/layer_commands.h"
 #include "ps/paint_commands.h"
 #include "ps/pixel_commands.h"
@@ -218,6 +219,34 @@ std::vector<Case> all_cases() {
          // The selection ends at document row 84, ten rows into the layer.
          d.edit_layer_pixels(1, {0, 0, 40, 10})
              .fill({0, 0, 40, 10}, {0, 255, 255, 255});
+       }},
+      {"Gaussian Blur",
+       [] { return std::make_unique<FilterCommand>(1, GaussianBlur{3.0f}); },
+       [](Document& d) {
+         // Blur the layer with its surroundings, keep the selected part.
+         const Layer& layer = d.layers().at(1);
+         const Rect area{kT + 10 - 10, kT + 10 - 10, 60, 40};  // layer plus margin
+         const Rect sel = area.intersect({20, 20, 2 * kT, kT});
+         const Rect source{area.x - 10, area.y - 10, area.width + 20,
+                           area.height + 20};
+         const Image src = layer.pixels.read(
+             {source.x - layer.offset.x, source.y - layer.offset.y, source.width,
+              source.height});
+         const Image blurred = apply_filter(GaussianBlur{3.0f}, src, {source.x, source.y});
+         const Image keep = blurred.cropped(
+             {sel.x - source.x, sel.y - source.y, sel.width, sel.height});
+         d.edit_layer_pixels(1, {sel.x - layer.offset.x, sel.y - layer.offset.y,
+                                 sel.width, sel.height})
+             .write(keep, {sel.x - layer.offset.x, sel.y - layer.offset.y});
+       }},
+      {"Add Noise",
+       [] { return std::make_unique<FilterCommand>(0, AddNoise{30, true, 5}); },
+       [](Document& d) {
+         const Rect sel{20, 20, 2 * kT, kT};
+         const Image noisy = apply_filter(AddNoise{30, true, 5},
+                                          d.layers().at(0).pixels.read(sel),
+                                          {sel.x, sel.y});
+         d.edit_layer_pixels(0, sel).write(noisy, {sel.x, sel.y});
        }},
   };
 }

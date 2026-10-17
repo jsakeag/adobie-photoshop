@@ -3,8 +3,11 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 7 (Filters): not started.
-**Next step:** Gaussian blur, unsharp mask, noise (seeded, so it is a parameterized command) and motion blur, optionally emboss/find edges, as commands on the selected layer, limited to the selection like `AdjustCommand`, reading a halo around the area for the kernel. Each with a golden. GUI: a Filters palette with radius/amount sliders and the same preview/Apply/Cancel flow as Adjustments (consider sharing that code). The spec's cancellable progress callback and downsampled preview can wait until filters are slow on real images.
+**Current milestone:** 8 (Transform): not started.
+**Next step:** Image Size (resample the whole document, bicubic) and scale/rotate of a layer or selection with a 3x3 matrix and inverse mapping (bilinear while dragging, bicubic on commit), as commands. Canvas size, crop, rotate and flip already exist in the core but have no GUI yet: add an Image menu or palette for them too. GUI: a transform tool or dialog with preview, plus `--selftest` steps.
+
+**Known issues** (left on purpose, 2026-10-16):
+- The blend mode menu in the Layers palette opens to the right, off the window's edge, so it can't be seen. Fix: `blend_->set_side(nanogui::Popup::Left)` in `LayersPanel`, as `EffectsPanel` does.
 
 ## Build and test
 ```
@@ -19,7 +22,7 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
 ## Session protocol
 1. Start: read this file, run the full test suite, confirm it's green.
 2. Work on the current milestone only. Do not start the next one early. **Every milestone includes its GUI binding**: a feature is not done until it can be used from the app, through a command, and the README says how.
-3. End: run tests, run `--selftest` and look at its screenshots (macOS screen capture is blocked here; the self-test reads the app's own framebuffer instead). Extend the self-test with steps for any new GUI. Say plainly what it does not cover: real mouse clicks, popups, file dialogs, key mapping. Update README.md (status line, and usage for anything user-facing that changed; compile any code sample you touch), commit, update "Current milestone" and "Next step" above.
+3. End: run tests, run `--selftest` and look at its screenshots (macOS screen capture is blocked here; the self-test reads the app's own framebuffer instead). NanoGUI clips a popup to where it was on the previous frame, so capture twice to see an open menu. Extend the self-test with steps for any new GUI. Say plainly what it does not cover: real mouse clicks, popups, file dialogs, key mapping. Update README.md (status line, and usage for anything user-facing that changed; compile any code sample you touch), commit, update "Current milestone" and "Next step" above.
 4. If a milestone runs over its estimate by 50%, cut scope within it. Do not borrow time from the next one.
 5. Keep ~2 hours of buffer. Do not spend it on features.
 
@@ -50,6 +53,8 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
   - `paint.h`: `paint_coverage(doc, layer, PaintTarget, coverage, colour, opacity, erase)`, the one place pixels or masks get painted: coverage x selection x opacity, clipped to the canvas, Normal-composited on pixels or moved toward the colour's grey level on a mask.
   - `adjustments.h`: `Adjustment` variant (`Levels`, `Curves`, `BrightnessContrast`, `HueSaturation`, `Invert`), LUT builders (curves are a monotone cubic through their points, Fritsch-Carlson), `adjust_hue_saturation` (per pixel, via HSL; saturation scales so greys stay grey), `adjustment_function` (pixel to pixel). Brightness/Contrast is the old linear kind: brightness shifts levels, contrast stretches around 127.5.
   - `adjust_commands.h`: `AdjustCommand(layer, adjustment)`: the layer's pixels within the canvas, blended by selection weight, alpha and fully transparent pixels untouched.
+  - `filters.h`: `Filter` variant (`GaussianBlur`, `UnsharpMask`, `AddNoise`, `MotionBlur`), `filter_halo` and `apply_filter` on a flat image with a margin. Blurs run on premultiplied float colour (no dark fringes against transparency). Noise is a hash of seed and document position, so preview and apply match exactly.
+  - `filter_commands.h`: `FilterCommand(layer, filter)`: the layer's bounds plus the halo, within the canvas, reading a further halo of context; blended by selection weight.
   - `tools.h`: `Tool` state machines (press, drag, release, cancel) for every `ToolKind` but the eyedropper; each makes one command on release, and `command()` gives the in-progress command for previews. `ToolSettings` is captured at press.
   - `Command`: base class for every edit. Subclasses hold their parameters as public const values and implement `name()` and `apply(doc)`. The base class provides `execute`, `undo` and `redo`: `execute` snapshots the document first and restores it if `apply` throws; undo and redo swap the saved snapshot with the current state.
   - `layer_commands.h`, `pixel_commands.h`, `canvas_commands.h`, `selection_commands.h`, `paint_commands.h`: the concrete commands, header-only.
@@ -61,8 +66,9 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
   - `App` (`app.h`): the main window. Holds the `Editor`, the selected layer index and the tool state (UI state, not document state). Its public actions (`open_as_layer`, `set_blend`, `add_mask`, `toggle_undo`, ...) are what widgets and shortcuts call; each builds a command and runs it, showing errors in the status bar. Widgets are rebuilt in `refresh()` from `draw_all`, never inside their own callbacks.
   - `CanvasView`: draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. Left-button gestures go to a `PointerHandler` in document coordinates; right-drag or Space+drag pans. Re-uploads the whole flattened composite (plus selection outline) after each change; per-tile upload can come later if it is slow.
   - `ToolsPanel`: the Tools palette window: tool buttons, foreground colour picker, Size/Hardness/Opacity/Tolerance sliders, Paint on Layer/Mask, Select All/None/Inverse, feather radius and Feather.
-  - `AdjustPanel`: the Adjustments palette (docked under Layers): kind menu, sliders per kind (Curves as three output sliders at 64/128/192, not a drawn curve), Apply/Cancel. Sliders are rebuilt only when the kind changes.
-  - `App` also owns the current `Tool` and its `ToolSettings`, and a pending (previewed) adjustment. A tool press drops a pending adjustment. While an adjustment is pending or a gesture is active, `show_canvas` runs that command on a copy of the document and shows the copy, so previews use the same code as the real edit.
+  - `effect.h`: `Effect`, the palette's flat variant of every adjustment and filter, with `default_effect`, `effect_name` and `effect_command` (to `AdjustCommand` or `FilterCommand`).
+  - `EffectsPanel`: the Adjustments & Filters palette (docked under Layers): Adjust... and Filter... menus (opening to the left, over the canvas), sliders per kind (Curves as three output sliders at 64/128/192, not a drawn curve), Apply/Cancel. Sliders are rebuilt only when the kind changes.
+  - `App` also owns the current `Tool` and its `ToolSettings`, and a pending (previewed) `Effect`. A tool press drops a pending effect. Each applied Add Noise gets a new seed. While an effect is pending or a gesture is active, `show_canvas` runs that command on a copy of the document and shows the copy, so previews use the same code as the real edit.
   - `LayersPanel`: the Layers palette window. Undo/redo toggle, blend mode, opacity (command on slider release), layer rows (top first: visibility checkbox, select button), New/Delete/Up/Down, Open Image as Layer, mask Reveal All/Hide All/Remove.
   - `selftest.cpp`: `--selftest out_dir base.png layer.png` drives `App`'s actions, checks the document and saves screenshots via `App::capture` (reads the back buffer in `draw_teardown`). Fixtures in `tests/fixtures/`.
 - `tests/`: Catch2 v3. Golden PNGs in `tests/golden/`, compared exactly; mismatches are written to `build/tests/output/`.
@@ -140,7 +146,7 @@ Document
 - [x] **4b. GUI catch-up (1.5h):** undo/redo, layers panel (visibility, select, opacity, blend mode, new/delete/reorder, mask add/remove, open as layer). Taken from milestone 10's time; each later milestone budgets its own GUI work inside its estimate.
 - [x] **5. Selection + paint (4h):** marquee, lasso, magic wand, feather, invert; brush, eraser, paint bucket, eyedropper
 - [x] **6. Adjustments (2h):** levels, curves, hue/saturation, brightness/contrast, invert
-- [ ] **7. Filters (1.5h):** Gaussian blur, unsharp mask, noise, motion blur, optionally emboss/find edges
+- [x] **7. Filters (1.5h):** Gaussian blur, unsharp mask, noise, motion blur, optionally emboss/find edges
 - [ ] **8. Transform (2.5h):** crop, canvas/image size, scale/rotate with bicubic resampling *(basic canvas ops already exist)*
 - [ ] **9. File I/O (2h):** native save/load, PNG/JPEG import/export
 - [ ] **10. Polish the UI (1h):** *(reduced: GUI now built per milestone)* layer thumbnails, drag-reorder, shortcuts, layout. The panels and tools themselves arrive with milestones 4b-9.
@@ -188,3 +194,4 @@ Open a PNG or JPEG, add layers with blend modes and masks, make selections, pain
 - Session 3 (2026-10-16): milestone 4b. Layers palette and Cmd+Z toggle in the app, `blend_mode_name`/`kBlendModes` and `Editor::toggle_undo` in core, `--selftest` with framebuffer screenshots (all checks pass, screenshots inspected).
 - Session 3 (2026-10-16), milestone 5: selection math, `Stroke` and `paint_coverage`, selection and paint commands, tool state machines, Tools palette, canvas gestures with live preview, marching ants, shortcuts. Nothing cut. Self-test extended to 32 checks; screenshots inspected.
 - Session 3 (2026-10-16), milestone 6: adjustments core (LUTs, monotone curves, HSL), `AdjustCommand`, six goldens, Adjustments palette with live preview, Apply/Cancel. Curves GUI simplified to three sliders (a drawn curve editor is milestone 10 polish if wanted). Self-test at 40 checks; screenshots inspected.
+- Session 3 (2026-10-16), milestone 7: four filters with goldens, `FilterCommand`, the Adjustments palette widened to Adjustments & Filters with Adjust... and Filter... menus opening left (fixes the off-screen adjustment menu too). Emboss/find edges skipped. Found while testing: an open popup draws empty on its first frame (clip from the previous frame), so the self-test captures open menus twice. Self-test at 47 checks; screenshots inspected.

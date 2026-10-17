@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -8,11 +9,11 @@
 
 #include <nanogui/screen.h>
 
-#include "ps/adjustments.h"
+#include "effect.h"
 #include "ps/editor.h"
 #include "ps/tools.h"
 
-class AdjustPanel;
+class EffectsPanel;
 class CanvasView;
 class LayersPanel;
 class ToolsPanel;
@@ -68,12 +69,14 @@ class App : public nanogui::Screen {
   void set_feather_radius(float radius);
   void feather_selection();
 
-  // Adjustments palette. A previewed adjustment shows on the canvas until
-  // it is applied (one command on the selected layer) or cancelled.
-  void preview_adjustment(const ps::Adjustment& adjustment);
-  void apply_adjustment();
-  void cancel_adjustment();
-  bool previewing_adjustment() const { return pending_.has_value(); }
+  // Adjustments & Filters palette. A previewed effect shows on the canvas
+  // until it is applied (one command on the selected layer) or cancelled.
+  void preview_effect(const Effect& effect);
+  void apply_effect();
+  void cancel_effect();
+  bool previewing_effect() const { return pending_.has_value(); }
+  // Opens or closes the palette's Adjust or Filter menu (for the self-test).
+  void open_effect_menu(bool filters, bool open);
 
   // Canvas gestures, in document coordinates. Shift adds to a selection,
   // Alt (Option) subtracts from it.
@@ -117,8 +120,9 @@ class App : public nanogui::Screen {
   ps::ToolSettings settings_;  // colour, brush and tolerance; the rest is
                                // filled in when a gesture starts
   bool paint_on_mask_ = false;
-  ps::Adjustment adjustment_ = ps::Levels{};  // what the palette shows
-  std::optional<ps::Adjustment> pending_;     // previewed, not yet applied
+  Effect effect_ = ps::Levels{};    // what the palette shows
+  std::optional<Effect> pending_;   // previewed, not yet applied
+  std::uint32_t noise_seed_ = 1;    // so each Add Noise differs
   float feather_radius_ = 5.0f;
 
   bool canvas_stale_ = true;    // the picture needs redrawing
@@ -127,6 +131,6 @@ class App : public nanogui::Screen {
   CanvasView* canvas_ = nullptr;
   ToolsPanel* tools_ = nullptr;
   LayersPanel* layers_ = nullptr;
-  AdjustPanel* adjust_ = nullptr;
+  EffectsPanel* effects_ = nullptr;
   nanogui::Label* status_ = nullptr;
 };

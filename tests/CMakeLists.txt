@@ -19,6 +19,7 @@ add_executable(ps_tests
   test_document_layers.cpp
   test_document_state.cpp
   test_editor.cpp
+  test_filters.cpp
   test_image.cpp
   test_image_io.cpp
   test_layer_mask.cpp

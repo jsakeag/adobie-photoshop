@@ -9,6 +9,7 @@
 
 #include "app.h"
 #include "ps/adjustments.h"
+#include "ps/filters.h"
 #include "ps/blend.h"
 #include "ps/tools.h"
 
@@ -181,37 +182,71 @@ int run_selftest(const std::string& out_dir, const std::string& base_image,
     // Milestone 6: adjustments with live preview.
     check(app->open(base_image), "reopen for adjustments");
     const ps::Color sky_before = pixel(300, 50);
-    app->preview_adjustment(ps::Levels{});
-    app->preview_adjustment(ps::Levels{60, 255, 1.0f, 0, 255});
-    check(app->previewing_adjustment() && pixel(300, 50) == sky_before &&
+    app->preview_effect(ps::Levels{});
+    app->preview_effect(ps::Levels{60, 255, 1.0f, 0, 255});
+    check(app->previewing_effect() && pixel(300, 50) == sky_before &&
               !app->editor().can_undo(),
           "a previewed adjustment leaves the document alone");
     shot("12_levels_preview");
-    app->apply_adjustment();
-    check(!app->previewing_adjustment() && app->editor().undo_name() == "Levels",
+    app->apply_effect();
+    check(!app->previewing_effect() && app->editor().undo_name() == "Levels",
           "Apply makes one Levels step");
     check(pixel(300, 50) != sky_before, "and changes the picture");
 
-    app->preview_adjustment(ps::BrightnessContrast{80, 0});
-    app->cancel_adjustment();
-    check(!app->previewing_adjustment() && app->editor().undo_name() == "Levels",
+    app->preview_effect(ps::BrightnessContrast{80, 0});
+    app->cancel_effect();
+    check(!app->previewing_effect() && app->editor().undo_name() == "Levels",
           "Cancel drops the preview");
 
     app->set_tool(ps::ToolKind::RectMarquee);
     stroke({0, 0}, {320, 420});
     const ps::Color left = pixel(100, 380), right = pixel(500, 380);
-    app->preview_adjustment(ps::HueSaturation{});
-    app->preview_adjustment(ps::HueSaturation{180, 0, 0});
+    app->preview_effect(ps::HueSaturation{});
+    app->preview_effect(ps::HueSaturation{180, 0, 0});
     shot("13_hue_preview_in_selection");
-    app->apply_adjustment();
+    app->apply_effect();
     check(pixel(100, 380) != left && pixel(500, 380) == right,
           "Hue/Saturation changes only the selection");
-    app->preview_adjustment(ps::Invert{});
-    app->apply_adjustment();
+    app->preview_effect(ps::Invert{});
+    app->apply_effect();
     check(app->editor().undo_name() == "Invert", "Invert applies without settings");
     shot("14_after_invert");
     app->toggle_undo();
     check(app->editor().redo_name() == "Invert", "and undoes");
+
+    // Milestone 7: filters, and the effect menu must open on screen.
+    app->deselect();
+    // A popup is clipped to where it was on the previous frame, so draw one
+    // frame before capturing it open.
+    app->open_effect_menu(false, true);
+    shot("15_adjust_menu_open");
+    shot("15_adjust_menu_open");
+    app->open_effect_menu(false, false);
+    app->open_effect_menu(true, true);
+    shot("15b_filter_menu_open");
+    shot("15b_filter_menu_open");
+    app->open_effect_menu(true, false);
+    const ps::Color sharp_edge = pixel(470, 59);  // the sun's top rim
+    app->preview_effect(ps::GaussianBlur{0.0f});
+    app->preview_effect(ps::GaussianBlur{6.0f});
+    check(app->previewing_effect() && pixel(470, 59) == sharp_edge,
+          "a previewed blur leaves the document alone");
+    shot("16_blur_preview");
+    app->apply_effect();
+    check(app->editor().undo_name() == "Gaussian Blur" && pixel(470, 59) != sharp_edge,
+          "Apply blurs the layer");
+    app->preview_effect(ps::AddNoise{0, false, 1});
+    app->preview_effect(ps::AddNoise{40, false, 1});
+    app->apply_effect();
+    check(app->editor().undo_name() == "Add Noise", "Add Noise applies");
+    app->preview_effect(ps::MotionBlur{0.0f, 1});
+    app->preview_effect(ps::MotionBlur{20.0f, 30});
+    app->apply_effect();
+    app->preview_effect(ps::UnsharpMask{0.0f, 1.0f, 0});
+    app->preview_effect(ps::UnsharpMask{2.0f, 2.0f, 0});
+    app->apply_effect();
+    check(app->editor().undo_name() == "Unsharp Mask", "Motion Blur and Unsharp Mask apply");
+    shot("17_after_filters");
   }
   nanogui::shutdown();
   std::printf("%s\n", failures == 0 ? "selftest passed" : "selftest FAILED");
