@@ -10,7 +10,9 @@
 #include "app.h"
 #include "ps/adjustments.h"
 #include "ps/filters.h"
+#include "effect.h"
 #include "ps/blend.h"
+#include "ps/transform.h"
 #include "ps/tools.h"
 
 namespace {
@@ -218,14 +220,14 @@ int run_selftest(const std::string& out_dir, const std::string& base_image,
     app->deselect();
     // A popup is clipped to where it was on the previous frame, so draw one
     // frame before capturing it open.
-    app->open_effect_menu(false, true);
+    app->open_effect_menu(0, true);
     shot("15_adjust_menu_open");
     shot("15_adjust_menu_open");
-    app->open_effect_menu(false, false);
-    app->open_effect_menu(true, true);
+    app->open_effect_menu(0, false);
+    app->open_effect_menu(1, true);
     shot("15b_filter_menu_open");
     shot("15b_filter_menu_open");
-    app->open_effect_menu(true, false);
+    app->open_effect_menu(1, false);
     const ps::Color sharp_edge = pixel(470, 59);  // the sun's top rim
     app->preview_effect(ps::GaussianBlur{0.0f});
     app->preview_effect(ps::GaussianBlur{6.0f});
@@ -247,6 +249,52 @@ int run_selftest(const std::string& out_dir, const std::string& base_image,
     app->apply_effect();
     check(app->editor().undo_name() == "Unsharp Mask", "Motion Blur and Unsharp Mask apply");
     shot("17_after_filters");
+
+    // Milestone 8: canvas buttons and the Transform menu.
+    check(app->open(base_image), "reopen for transforms");
+    app->rotate_canvas(ps::Rotation::CW90);
+    check(doc().width() == 420 && doc().height() == 640, "Rot CW turns the canvas");
+    app->toggle_undo();
+    app->flip_canvas(ps::FlipAxis::Horizontal);
+    check(pixel(640 - 1 - 470, 150) == yellow, "Flip H mirrors the sun");
+    app->toggle_undo();
+    app->set_tool(ps::ToolKind::RectMarquee);
+    stroke({300, 40}, {600, 280});
+    app->crop_to_selection();
+    check(doc().width() == 300 && doc().height() == 240, "Crop to the selection");
+    app->toggle_undo();
+    app->deselect();
+
+    app->open_effect_menu(2, true);
+    shot("18_transform_menu_open");
+    shot("18_transform_menu_open");
+    app->open_effect_menu(2, false);
+    app->preview_effect(ImageSizeEffect{100});
+    app->preview_effect(ImageSizeEffect{50});
+    check(doc().width() == 640, "a previewed Image Size leaves the document alone");
+    app->apply_effect();
+    check(doc().width() == 320 && doc().height() == 210 &&
+              app->editor().undo_name() == "Image Size",
+          "Image Size 50% halves the document");
+    app->toggle_undo();
+    app->preview_effect(CanvasSizeEffect{100, 100, 4});
+    app->preview_effect(CanvasSizeEffect{150, 120, 3});
+    app->apply_effect();
+    check(doc().width() == 960 && doc().height() == 504 && pixel(470, 150) == yellow,
+          "Canvas Size grows to the right, anchored left");
+    shot("19_canvas_size");
+    app->toggle_undo();
+
+    check(app->open_as_layer(layer_image), "add a layer to transform");
+    const ps::Rect before_bounds = ps::opaque_bounds(doc().layers().at(1).pixels);
+    app->preview_effect(LayerTransformEffect{});
+    app->preview_effect(LayerTransformEffect{70, 70, 30});
+    shot("20_scale_rotate_preview");
+    app->apply_effect();
+    const ps::Rect after_bounds = ps::opaque_bounds(doc().layers().at(1).pixels);
+    check(app->editor().undo_name() == "Transform" && after_bounds.width != before_bounds.width,
+          "Scale/Rotate transforms the layer");
+    shot("21_after_scale_rotate");
   }
   nanogui::shutdown();
   std::printf("%s\n", failures == 0 ? "selftest passed" : "selftest FAILED");

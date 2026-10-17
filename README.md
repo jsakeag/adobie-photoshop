@@ -2,7 +2,7 @@
 
 A raster image editor modeled on Photoshop 3.0-4.0, written in C++17. The core is headless; a thin NanoGUI app shows the result. See [CLAUDE.md](CLAUDE.md) for the plan and architecture.
 
-**Status:** milestones 1-7 are done: canvas, layers and compositor, blend modes and masks, commands and undo, selection and paint tools, adjustments and filters, all usable from the app. Next is transform (milestone 8).
+**Status:** milestones 1-8 are done: canvas, layers and compositor, blend modes and masks, commands and undo, selection and paint tools, adjustments, filters and transforms, all usable from the app. Next is file I/O (milestone 9): until then, nothing can be saved from the app.
 
 ## Build and test
 
@@ -44,8 +44,10 @@ Add `-DPS_BUILD_APP=OFF` to the first command to skip the NanoGUI app.
   - Painting and filling only change the selected area when something is selected, and feathered edges paint partly.
   - **Colour** opens a picker for the foreground colour. **Paint on: Layer / Mask** chooses whether tools change the layer's pixels or its mask (black hides, white shows).
   - **Select: All / None / Inverse** (also Cmd+A, Cmd+D, Cmd+Shift+I) and **Feather** with its radius slider.
+  - **Image: Rot CW / Rot CCW / Rot 180 / Flip H / Flip V** turn or mirror the whole canvas; **Crop** crops to the selection.
   - Esc cancels a drag in progress. Every stroke, fill and selection change is one undo step.
-- **Adjustments & Filters palette** (under the Layers palette): pick from the **Adjust...** menu (Levels, Curves, Brightness/Contrast, Hue/Saturation, Invert) or the **Filter...** menu (Gaussian Blur, Unsharp Mask, Add Noise, Motion Blur). Moving a slider previews the result on the canvas; **Apply** makes it one undo step on the selected layer, **Cancel** drops it. With a selection, only the selected area changes. Curves here are three sliders for the output at inputs 64, 128 and 192.
+- **Image palette** (under the Layers palette): pick from the **Adjust...** menu (Levels, Curves, Brightness/Contrast, Hue/Saturation, Invert), the **Filter...** menu (Gaussian Blur, Unsharp Mask, Add Noise, Motion Blur) or the **Transform...** menu (Image Size, Canvas Size, Scale/Rotate Layer). Moving a slider previews the result on the canvas; **Apply** makes it one undo step, **Cancel** drops it. Adjustments and filters change the selected layer, only within the selection if there is one. Curves here are three sliders for the output at inputs 64, 128 and 192.
+  - **Image Size** resamples the whole document (aspect kept, bicubic); **Canvas Size** adds or trims canvas around an anchor; **Scale/Rotate Layer** scales and turns the selected layer about its centre (bilinear while previewing, bicubic on Apply).
 - **Known issue:** the blend mode menu in the Layers palette opens off the right edge of the window, so it can't be seen. It needs a one-line code fix (see CLAUDE.md).
 
 To check the GUI without clicking through it, `--selftest` runs the same actions the widgets and canvas gestures call, checks the document after each, and saves screenshots:
@@ -102,6 +104,7 @@ Undo is single-level, as in Photoshop 3: `undo()` and `redo()` toggle the last c
 | `ps/selection_commands.h` | `SelectRectCommand`, `SelectEllipseCommand`, `SelectPolygonCommand`, `MagicWandCommand`, `SelectAllCommand`, `DeselectCommand`, `InvertSelectionCommand`, `FeatherSelectionCommand` |
 | `ps/adjust_commands.h` | `AdjustCommand` with a `Levels`, `Curves`, `BrightnessContrast`, `HueSaturation` or `Invert` from `ps/adjustments.h` |
 | `ps/filter_commands.h` | `FilterCommand` with a `GaussianBlur`, `UnsharpMask`, `AddNoise` or `MotionBlur` from `ps/filters.h` |
+| `ps/transform_commands.h` | `ImageSizeCommand`, `TransformLayerCommand` (a `Matrix3` from `ps/transform.h`); `CropToSelectionCommand` is in `ps/canvas_commands.h` |
 | `ps/paint_commands.h` | `PaintStrokeCommand` (coverage from a `Stroke` in `ps/brush.h`), `BucketFillCommand` |
 
 Layer indices run bottom to top, so the background is 0. `editor.document()` is read-only: `layers()` to inspect, `flatten()` or `render(rect)` for the composite.

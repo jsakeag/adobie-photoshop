@@ -75,8 +75,14 @@ class App : public nanogui::Screen {
   void apply_effect();
   void cancel_effect();
   bool previewing_effect() const { return pending_.has_value(); }
-  // Opens or closes the palette's Adjust or Filter menu (for the self-test).
-  void open_effect_menu(bool filters, bool open);
+  // Opens or closes one of the Image palette's menus, an index into
+  // kEffectMenus (for the self-test).
+  void open_effect_menu(std::size_t menu, bool open);
+
+  // Image operations from the Tools palette.
+  void rotate_canvas(ps::Rotation rotation);
+  void flip_canvas(ps::FlipAxis axis);
+  void crop_to_selection();
 
   // Canvas gestures, in document coordinates. Shift adds to a selection,
   // Alt (Option) subtracts from it.

@@ -48,30 +48,24 @@ std::function<void(Effect&, float)> curve_set(std::size_t i) {
 }  // namespace
 
 EffectsPanel::EffectsPanel(nanogui::Widget* parent, EffectsPanelActions actions)
-    : nanogui::Window(parent, "Adjustments & Filters"),
+    : nanogui::Window(parent, "Image"),
       actions_(std::move(actions)),
       effect_(default_effect(0)) {
   set_fixed_width(kWidth);
   set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
-  std::vector<std::string> adjustments{"Adjust..."}, filters{"Filter..."};
-  for (std::size_t k = 0; k < kEffectCount; ++k) {
-    (k < kFirstFilter ? adjustments : filters).push_back(effect_name(k));
-  }
-  adjust_menu_ = new nanogui::ComboBox(this, adjustments);
-  filter_menu_ = new nanogui::ComboBox(this, filters);
-  for (nanogui::ComboBox* menu : {adjust_menu_, filter_menu_}) {
+  for (const EffectMenu& m : kEffectMenus) {
+    std::vector<std::string> items{m.placeholder};
+    for (std::size_t k = m.first; k < m.first + m.count; ++k) items.push_back(effect_name(k));
+    auto* menu = new nanogui::ComboBox(this, items);
     // The palette is docked at the window's right edge: open the menus over
     // the canvas, not off-screen.
     menu->set_side(nanogui::Popup::Left);
+    const std::size_t first = m.first;
+    menu->set_callback([this, first](int i) {
+      if (i > 0) actions_.preview(default_effect(first + static_cast<std::size_t>(i - 1)));
+    });
+    menus_.push_back(menu);
   }
-  adjust_menu_->set_callback([this](int i) {
-    if (i > 0) actions_.preview(default_effect(static_cast<std::size_t>(i - 1)));
-  });
-  filter_menu_->set_callback([this](int i) {
-    if (i > 0) {
-      actions_.preview(default_effect(kFirstFilter + static_cast<std::size_t>(i - 1)));
-    }
-  });
   controls_ = new nanogui::Widget(this);
   controls_->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 5));
 
@@ -89,18 +83,19 @@ void EffectsPanel::show(const Effect& effect) {
   effect_ = effect;
   if (effect.index() != kind_) {
     kind_ = effect.index();
-    const bool filter = kind_ >= kFirstFilter;
-    adjust_menu_->set_selected_index(filter ? 0 : static_cast<int>(kind_) + 1);
-    filter_menu_->set_selected_index(
-        filter ? static_cast<int>(kind_ - kFirstFilter) + 1 : 0);
+    for (std::size_t i = 0; i < kEffectMenus.size(); ++i) {
+      const EffectMenu& m = kEffectMenus[i];
+      const bool here = kind_ >= m.first && kind_ < m.first + m.count;
+      menus_[i]->set_selected_index(here ? static_cast<int>(kind_ - m.first) + 1 : 0);
+    }
     rebuild();
   }
   for (Control& c : sliders_) c.slider->set_value(c.get(effect_));
   update_labels();
 }
 
-void EffectsPanel::open_menu(bool filters, bool open) {
-  nanogui::ComboBox* menu = filters ? filter_menu_ : adjust_menu_;
+void EffectsPanel::open_menu(std::size_t index, bool open) {
+  nanogui::ComboBox* menu = menus_.at(index);
   menu->set_pushed(open);
   menu->popup()->set_visible(open);
 }
@@ -164,6 +159,34 @@ void EffectsPanel::rebuild() {
           {"Distance (px)", 1, 100, 0, get(&MotionBlur::distance), set(&MotionBlur::distance)},
       };
       break;
+    case 9:
+      sliders_ = {{"Size (%)", 10, 400, 0, get(&ImageSizeEffect::percent),
+                   set(&ImageSizeEffect::percent)}};
+      break;
+    case 10: {
+      static const char* const anchors[9] = {"Top left", "Top",    "Top right",
+                                             "Left",     "Centre", "Right",
+                                             "Bottom left", "Bottom", "Bottom right"};
+      sliders_ = {
+          {"Width (%)", 10, 400, 0, get(&CanvasSizeEffect::width_percent),
+           set(&CanvasSizeEffect::width_percent)},
+          {"Height (%)", 10, 400, 0, get(&CanvasSizeEffect::height_percent),
+           set(&CanvasSizeEffect::height_percent)},
+          {"Anchor", 0, 8, 0, get(&CanvasSizeEffect::anchor), set(&CanvasSizeEffect::anchor),
+           [](float v) { return std::string("Anchor: ") + anchors[whole(v)]; }},
+      };
+      break;
+    }
+    case 11:
+      sliders_ = {
+          {"Width (%)", 10, 400, 0, get(&LayerTransformEffect::scale_x),
+           set(&LayerTransformEffect::scale_x)},
+          {"Height (%)", 10, 400, 0, get(&LayerTransformEffect::scale_y),
+           set(&LayerTransformEffect::scale_y)},
+          {"Angle", -180, 180, 0, get(&LayerTransformEffect::angle),
+           set(&LayerTransformEffect::angle)},
+      };
+      break;
     default:
       sliders_.clear();
       new nanogui::Label(controls_, "No settings: Apply inverts.");
@@ -184,6 +207,10 @@ void EffectsPanel::rebuild() {
 
 void EffectsPanel::update_labels() {
   for (Control& c : sliders_) {
+    if (c.format) {
+      c.label->set_caption(c.format(c.get(effect_)));
+      continue;
+    }
     char text[64];
     std::snprintf(text, sizeof(text), "%s: %.*f", c.caption.c_str(), c.decimals,
                   static_cast<double>(c.get(effect_)));

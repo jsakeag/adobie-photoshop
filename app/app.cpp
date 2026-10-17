@@ -13,6 +13,7 @@
 #include "canvas_view.h"
 #include "effects_panel.h"
 #include "layers_panel.h"
+#include "ps/canvas_commands.h"
 #include "ps/image_io.h"
 #include "ps/layer_commands.h"
 #include "ps/selection_commands.h"
@@ -57,6 +58,9 @@ App::App() : nanogui::Screen(nanogui::Vector2i(1280, 800), "Mock Photoshop") {
   tool_actions.invert_selection = [this] { invert_selection(); };
   tool_actions.set_feather_radius = [this](float r) { set_feather_radius(r); };
   tool_actions.feather_selection = [this] { feather_selection(); };
+  tool_actions.rotate_canvas = [this](ps::Rotation r) { rotate_canvas(r); };
+  tool_actions.flip_canvas = [this](ps::FlipAxis a) { flip_canvas(a); };
+  tool_actions.crop_to_selection = [this] { crop_to_selection(); };
   tools_ = new ToolsPanel(this, std::move(tool_actions));
   set_tool(tool_kind_);
 
@@ -251,7 +255,7 @@ void App::apply_effect() {
   if (!pending_ && !std::holds_alternative<ps::Invert>(effect_)) return;
   const Effect effect = pending_ ? *pending_ : effect_;
   pending_.reset();
-  if (run(effect_command(selected_, effect)) &&
+  if (run(effect_command(selected_, effect, editor_.document(), false)) &&
       std::holds_alternative<ps::AddNoise>(effect)) {
     ++noise_seed_;
   }
@@ -264,8 +268,18 @@ void App::cancel_effect() {
   canvas_stale_ = palettes_stale_ = true;
 }
 
-void App::open_effect_menu(bool filters, bool open) {
-  effects_->open_menu(filters, open);
+void App::rotate_canvas(ps::Rotation rotation) {
+  run(std::make_unique<ps::RotateCanvasCommand>(rotation));
+}
+
+void App::flip_canvas(ps::FlipAxis axis) {
+  run(std::make_unique<ps::FlipCanvasCommand>(axis));
+}
+
+void App::crop_to_selection() { run(std::make_unique<ps::CropToSelectionCommand>()); }
+
+void App::open_effect_menu(std::size_t menu, bool open) {
+  effects_->open_menu(menu, open);
   palettes_stale_ = true;
 }
 
@@ -378,7 +392,7 @@ void App::show_canvas() {
   // copy of the document (cheap: the copy shares every tile).
   std::unique_ptr<ps::Command> command;
   if (pending_ && selected_ < editor_.document().layers().size()) {
-    command = effect_command(selected_, *pending_);
+    command = effect_command(selected_, *pending_, editor_.document(), true);
   } else if (tool_ && tool_->active()) {
     command = tool_->command();
   }

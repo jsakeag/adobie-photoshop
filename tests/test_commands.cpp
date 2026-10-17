@@ -15,6 +15,7 @@
 #include "ps/paint_commands.h"
 #include "ps/pixel_commands.h"
 #include "ps/selection_commands.h"
+#include "ps/transform_commands.h"
 #include "state_checks.h"
 
 using namespace ps;
@@ -239,6 +240,20 @@ std::vector<Case> all_cases() {
                                  sel.width, sel.height})
              .write(keep, {sel.x - layer.offset.x, sel.y - layer.offset.y});
        }},
+      {"Image Size",
+       [] { return std::make_unique<ImageSizeCommand>(100, 70, Interpolation::Bicubic); },
+       [](Document& d) { d.resize_image(100, 70, Interpolation::Bicubic); }},
+      {"Transform",
+       [] {
+         return std::make_unique<TransformLayerCommand>(
+             1, scale_rotate_about({kT + 30, kT + 20}, 0.5, 1.5, 20), Interpolation::Bicubic);
+       },
+       [](Document& d) {
+         d.transform_layer(1, scale_rotate_about({kT + 30, kT + 20}, 0.5, 1.5, 20),
+                           Interpolation::Bicubic);
+       }},
+      {"Crop", [] { return std::make_unique<CropToSelectionCommand>(); },
+       [](Document& d) { d.crop({20, 20, 2 * kT, kT}); }},
       {"Add Noise",
        [] { return std::make_unique<FilterCommand>(0, AddNoise{30, true, 5}); },
        [](Document& d) {

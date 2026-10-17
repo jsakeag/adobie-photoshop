@@ -35,9 +35,9 @@ class EffectsPanel : public nanogui::Window {
   // is safe to call while a slider is being dragged.
   void show(const Effect& effect);
 
-  // Opens or closes the Adjust menu (or the Filter menu), for the
+  // Opens or closes one of the menus (an index into kEffectMenus), for the
   // self-test's screenshots.
-  void open_menu(bool filters, bool open);
+  void open_menu(std::size_t menu, bool open);
 
  private:
   struct Control {
@@ -46,6 +46,7 @@ class EffectsPanel : public nanogui::Window {
     int decimals;  // shown after the point
     std::function<float(const Effect&)> get;
     std::function<void(Effect&, float)> set;
+    std::function<std::string(float)> format;  // overrides the number if set
     nanogui::Label* label = nullptr;
     nanogui::Slider* slider = nullptr;
   };
@@ -56,11 +57,10 @@ class EffectsPanel : public nanogui::Window {
   EffectsPanelActions actions_;
   Effect effect_;
   std::size_t kind_ = static_cast<std::size_t>(-1);
-  // Two menus, as in Photoshop's Image > Adjust and Filter: each starts
-  // with a placeholder item that shows while the other menu's kind is
-  // chosen.
-  nanogui::ComboBox* adjust_menu_ = nullptr;
-  nanogui::ComboBox* filter_menu_ = nullptr;
+  // One menu per entry of kEffectMenus, as in Photoshop's Image > Adjust,
+  // Filter and Layer > Transform. Each starts with a placeholder item that
+  // shows while another menu's kind is chosen.
+  std::vector<nanogui::ComboBox*> menus_;
   nanogui::Widget* controls_ = nullptr;
   std::vector<Control> sliders_;
 };

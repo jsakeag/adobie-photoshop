@@ -1,8 +1,10 @@
 #pragma once
 
+#include <stdexcept>
 #include <string>
 
 #include "ps/command.h"
+#include "ps/selection.h"
 
 namespace ps {
 
@@ -35,6 +37,21 @@ class CropCommand : public Command {
 
  protected:
   void apply(Document& doc) override { doc.crop(area); }
+};
+
+// Crops to the tight bounds of the selection within the canvas. Throws
+// std::logic_error when nothing on the canvas is selected.
+class CropToSelectionCommand : public Command {
+ public:
+  std::string name() const override { return "Crop"; }
+
+ protected:
+  void apply(Document& doc) override {
+    const Rect area =
+        doc.selection() ? selected_bounds(*doc.selection(), doc.bounds()) : Rect{};
+    if (area.empty()) throw std::logic_error("Nothing is selected to crop to");
+    doc.crop(area);
+  }
 };
 
 class RotateCanvasCommand : public Command {

@@ -6,6 +6,7 @@
 #include <nanogui/window.h>
 
 #include "ps/brush.h"
+#include "ps/canvas_commands.h"
 #include "ps/tools.h"
 
 namespace nanogui {
@@ -28,6 +29,9 @@ struct ToolsPanelActions {
   std::function<void()> invert_selection;
   std::function<void(float)> set_feather_radius;
   std::function<void()> feather_selection;
+  std::function<void(ps::Rotation)> rotate_canvas;
+  std::function<void(ps::FlipAxis)> flip_canvas;
+  std::function<void()> crop_to_selection;
 };
 
 // What the palette shows.
@@ -76,4 +80,5 @@ class ToolsPanel : public nanogui::Window {
   nanogui::Label* feather_label_ = nullptr;
   nanogui::Slider* feather_radius_ = nullptr;
   nanogui::Button* feather_ = nullptr;
+  nanogui::Button* crop_ = nullptr;
 };

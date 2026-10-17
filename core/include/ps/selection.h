@@ -36,6 +36,9 @@ MaskGrid intersected(const MaskGrid& a, const MaskGrid& b);
 // Blurs the mask so edges fade over about `radius` pixels each way.
 MaskGrid feathered(const MaskGrid& mask, float radius);
 
+// Tight bounds of the pixels inside `within` that are at all selected.
+Rect selected_bounds(const MaskGrid& selection, Rect within);
+
 // Draws the selection's edge into `image` (whose top-left is at document
 // position `origin`) as black and white dashes, Photoshop's marching ants
 // standing still. Edge pixels are selected pixels (value >= 128) with an

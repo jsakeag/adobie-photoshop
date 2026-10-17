@@ -110,6 +110,16 @@ ToolsPanel::ToolsPanel(nanogui::Widget* parent, ToolsPanelActions actions)
     actions_.set_feather_radius(v);
   }, &feather_label_);
   feather_ = button(this, "Feather", kInner, [this] { actions_.feather_selection(); });
+
+  new Label(this, "Image");
+  Widget* turn = row(this);
+  button(turn, "Rot CW", third, [this] { actions_.rotate_canvas(ps::Rotation::CW90); });
+  button(turn, "Rot CCW", third, [this] { actions_.rotate_canvas(ps::Rotation::CCW90); });
+  button(turn, "Rot 180", third, [this] { actions_.rotate_canvas(ps::Rotation::R180); });
+  Widget* flip = row(this);
+  button(flip, "Flip H", third, [this] { actions_.flip_canvas(ps::FlipAxis::Horizontal); });
+  button(flip, "Flip V", third, [this] { actions_.flip_canvas(ps::FlipAxis::Vertical); });
+  crop_ = button(flip, "Crop", third, [this] { actions_.crop_to_selection(); });
 }
 
 nanogui::Slider* ToolsPanel::slider(const char* caption, float lo, float hi,
@@ -148,4 +158,5 @@ void ToolsPanel::refresh(const ToolsPanelState& state) {
   on_mask_->set_enabled(state.layer_has_mask);
   inverse_->set_enabled(state.has_selection);
   feather_->set_enabled(state.has_selection);
+  crop_->set_enabled(state.has_selection);
 }

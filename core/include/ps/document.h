@@ -8,6 +8,7 @@
 #include "ps/compositor.h"
 #include "ps/image.h"
 #include "ps/layer_stack.h"
+#include "ps/transform.h"
 
 namespace ps {
 
@@ -100,6 +101,16 @@ class Document {
   void rotate(Rotation rotation);
   void flip_horizontal();
   void flip_vertical();
+
+  // Image Size: resamples every layer and mask to fill a width x height
+  // canvas. Pixels outside the old canvas are dropped; layers end up at
+  // offset (0, 0).
+  void resize_image(int width, int height, Interpolation interpolation);
+
+  // Maps one layer and its mask through `m` (document coordinates),
+  // resampling with `interpolation`. Leaves the selection alone.
+  void transform_layer(std::size_t index, const Matrix3& m,
+                       Interpolation interpolation);
 
  private:
   // Rebuilds each layer and its mask from `pixels(old image)`, placed where

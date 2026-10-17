@@ -29,9 +29,15 @@ Rect offset_by(Rect r, Point p) {
 Image mask_as_image(const std::vector<std::uint8_t>& values, Rect r) {
   Image image(r.width, r.height);
   for (std::size_t i = 0; i < values.size(); ++i) {
-    image.data()[i * Image::kChannels] = values[i];
+    std::uint8_t* p = image.data() + i * Image::kChannels;
+    p[0] = p[1] = p[2] = values[i];
+    p[3] = 255;  // opaque, so resampling treats it as plain grey
   }
   return image;
+}
+
+Rect grown(Rect r, int by) {
+  return {r.x - by, r.y - by, r.width + 2 * by, r.height + 2 * by};
 }
 
 std::vector<std::uint8_t> image_as_mask(const Image& image) {
@@ -262,6 +268,68 @@ void Document::flip_vertical() {
   const int h = height_;
   remap_layers([](const Image& image) { return image.flipped_vertical(); },
                [&](Rect r) -> Point { return {r.x, h - r.bottom()}; });
+}
+
+void Document::resize_image(int width, int height, Interpolation interpolation) {
+  require_size(width, height);
+  const Matrix3 m = Matrix3::scale(double(width) / width_, double(height) / height_);
+  const Rect canvas = bounds();
+  const Rect target{0, 0, width, height};
+  for (std::size_t i = 0; i < layers_.size(); ++i) {
+    Layer& layer = layers_.at(i);
+    // The old canvas is the source, so its edges repeat rather than fade.
+    const Rect source = offset_by(canvas, {-layer.offset.x, -layer.offset.y});
+    const Rect shown = layer.bounds().intersect(canvas);
+    TileGrid pixels;
+    if (!shown.empty()) {
+      const Rect area = transformed_bounds(m, shown).intersect(target);
+      pixels.write(transform_image(layer.pixels.read(source), {0, 0}, m, area,
+                                   interpolation),
+                   {area.x, area.y});
+    }
+    layer.pixels = std::move(pixels);
+    if (layer.mask && !layer.mask->empty()) {
+      const Image values = mask_as_image(layer.mask->read(source), canvas);
+      MaskGrid mask(layer.mask->background());
+      mask.write(image_as_mask(transform_image(values, {0, 0}, m, target, interpolation)),
+                 target);
+      layer.mask = std::move(mask);
+    }
+    layer.offset = {0, 0};
+  }
+  width_ = width;
+  height_ = height;
+  selection_.reset();
+  compositor_.invalidate_all();
+}
+
+void Document::transform_layer(std::size_t index, const Matrix3& m,
+                               Interpolation interpolation) {
+  Layer& layer = layers_.at(index);
+  const Point to_layer{-layer.offset.x, -layer.offset.y};
+  const Rect old_bounds = layer.bounds();
+
+  if (!layer.pixels.empty()) {
+    // Two pixels of transparent margin, so edges fade instead of repeating.
+    const Rect source = grown(layer.bounds(), 2);
+    const Rect target = transformed_bounds(m, source);
+    const Image out = transform_image(layer.pixels.read(offset_by(source, to_layer)),
+                                      {source.x, source.y}, m, target, interpolation);
+    layer.pixels.clear();
+    layer.pixels.write(out, {target.x + to_layer.x, target.y + to_layer.y});
+  }
+  if (layer.mask && !layer.mask->empty()) {
+    // The margin reads the mask's background, which beyond it stays as is.
+    const Rect stored = grown(layer.mask->bounds(), 2);
+    const Rect source = offset_by(stored, layer.offset);
+    const Rect target = transformed_bounds(m, source);
+    const Image out = transform_image(mask_as_image(layer.mask->read(stored), stored),
+                                      {source.x, source.y}, m, target, interpolation);
+    layer.mask->clear();
+    layer.mask->write(image_as_mask(out), offset_by(target, to_layer));
+  }
+  compositor_.invalidate(old_bounds);
+  compositor_.invalidate(layer.bounds());
 }
 
 }  // namespace ps

@@ -224,6 +224,23 @@ MaskGrid feathered(const MaskGrid& mask, float radius) {
   return out;
 }
 
+Rect selected_bounds(const MaskGrid& selection, Rect within) {
+  if (within.empty()) return {};
+  const Values v = selection.read(within);
+  int x0 = within.width, y0 = within.height, x1 = -1, y1 = -1;
+  for (int y = 0; y < within.height; ++y) {
+    for (int x = 0; x < within.width; ++x) {
+      if (v[static_cast<std::size_t>(y) * within.width + x] == 0) continue;
+      x0 = std::min(x0, x);
+      x1 = std::max(x1, x);
+      y0 = std::min(y0, y);
+      y1 = std::max(y1, y);
+    }
+  }
+  if (x1 < 0) return {};
+  return {within.x + x0, within.y + y0, x1 - x0 + 1, y1 - y0 + 1};
+}
+
 void draw_selection_outline(Image& image, const MaskGrid& selection,
                             Point origin) {
   if (image.empty()) return;

@@ -29,6 +29,7 @@ add_executable(ps_tests
   test_selection.cpp
   test_tile_grid.cpp
   test_tools.cpp
+  test_transform.cpp
   test_viewport.cpp
 )
 target_link_libraries(ps_tests PRIVATE ps_core Catch2::Catch2WithMain)

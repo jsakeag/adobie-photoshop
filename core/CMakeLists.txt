@@ -17,6 +17,7 @@ add_library(ps_core STATIC
   src/selection.cpp
   src/tile_grid.cpp
   src/tools.cpp
+  src/transform.cpp
   src/viewport.cpp
 )
 target_include_directories(ps_core PUBLIC include)
