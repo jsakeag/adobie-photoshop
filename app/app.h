@@ -39,8 +39,15 @@ class App : public nanogui::Screen {
   const std::string& message() const { return message_; }
 
   // File. Return false and show the error in the status bar on failure.
+  // open() reads .mps documents or PNG/JPEG/... images.
   bool open(const std::string& path);
   bool open_as_layer(const std::string& path);
+  // Saves as .mps (adding the extension if missing) and remembers the path.
+  bool save_to(const std::string& path);
+  // Writes the composite as PNG or JPEG, chosen by the extension.
+  bool export_to(const std::string& path);
+  // Whether there are changes since the document was opened or saved.
+  bool dirty() const { return changes_ != saved_changes_; }
 
   // Edit.
   void toggle_undo();
@@ -107,6 +114,10 @@ class App : public nanogui::Screen {
   void set_document(ps::Document document, const std::string& name);
   void open_dialog();
   void open_as_layer_dialog();
+  void save();  // to the remembered path, or ask for one
+  void save_as_dialog();
+  void export_dialog();
+  void update_caption();
   bool paint_on_mask() const;
   void pick_color(ps::Vec2 point);
   // Brings the canvas and palettes up to date. Widgets are rebuilt here,
@@ -120,6 +131,11 @@ class App : public nanogui::Screen {
   ps::Editor editor_{ps::Document(1, 1)};
   std::size_t selected_ = 0;
   std::string message_;
+  std::string doc_name_;   // shown in the title bar
+  std::string doc_path_;   // the .mps file to save to; empty until there is one
+  std::uint64_t changes_ = 0;        // counts edits, undos and redos
+  std::uint64_t saved_changes_ = 0;  // changes_ when last opened or saved
+  std::string caption_;              // what the title bar shows now
 
   ps::ToolKind tool_kind_ = ps::ToolKind::Brush;
   std::unique_ptr<ps::Tool> tool_;

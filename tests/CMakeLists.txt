@@ -25,6 +25,7 @@ add_executable(ps_tests
   test_layer_mask.cpp
   test_layer_stack.cpp
   test_mask_grid.cpp
+  test_native_format.cpp
   test_paint.cpp
   test_selection.cpp
   test_tile_grid.cpp

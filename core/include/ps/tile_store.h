@@ -68,6 +68,14 @@ class TileStore {
     return count;
   }
 
+  // Every allocated tile, in no particular order.
+  std::vector<TileCoord> tile_coords() const {
+    std::vector<TileCoord> coords;
+    coords.reserve(tiles_.size());
+    for (const auto& entry : tiles_) coords.push_back(entry.first);
+    return coords;
+  }
+
   // Tiles that are not the same block in both stores, including tiles only
   // one of them has. Tiles left out are guaranteed to hold equal pixels.
   std::vector<TileCoord> changed_tiles(const TileStore& other) const {

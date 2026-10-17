@@ -19,6 +19,10 @@ class Slider;
 // What the Tools palette's controls do. Tool choice and settings are UI
 // state; the selection buttons run commands.
 struct ToolsPanelActions {
+  std::function<void()> open;
+  std::function<void()> save;
+  std::function<void()> save_as;
+  std::function<void()> export_image;
   std::function<void(ps::ToolKind)> set_tool;
   std::function<void(ps::Color)> set_color;
   std::function<void(ps::BrushSettings)> set_brush;

@@ -28,6 +28,7 @@ class MaskGrid {
   std::vector<TileCoord> changed_tiles(const MaskGrid& other) const {
     return store_.changed_tiles(other.store_);
   }
+  std::vector<TileCoord> tile_coords() const { return store_.tile_coords(); }
   Rect bounds() const { return store_.bounds(); }
   bool any_tile_in(Rect r) const { return store_.any_tile_in(r); }
 

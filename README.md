@@ -2,9 +2,11 @@
 
 A raster image editor modeled on Photoshop 3.0-4.0, written in C++17. The core is headless; a thin NanoGUI app shows the result. See [CLAUDE.md](CLAUDE.md) for the plan and architecture.
 
-**Status:** milestones 1-8 are done: canvas, layers and compositor, blend modes and masks, commands and undo, selection and paint tools, adjustments, filters and transforms, all usable from the app. Next is file I/O (milestone 9): until then, nothing can be saved from the app.
+**Status:** milestones 1-9 are done: canvas, layers and compositor, blend modes and masks, commands and undo, selection and paint tools, adjustments, filters, transforms, and saving, all usable from the app. Next is UI polish (milestone 10).
 
 ## Build and test
+
+Needs CMake, a C++17 compiler and zstd (`brew install zstd`). Catch2 and NanoGUI are downloaded by CMake; stb, miniz and nlohmann/json are in `third_party/`.
 
 ```
 cmake -S . -B build && cmake --build build -j
@@ -20,7 +22,10 @@ Add `-DPS_BUILD_APP=OFF` to the first command to skip the NanoGUI app.
 ```
 
 - **View:** scroll to zoom; drag with the right button, or hold Space and drag, to pan. Cmd with `=`, `-`, `0`, `1` zooms in, out, fits, or goes to 100%.
-- **Open:** Cmd+O, or drop a file on the window. This replaces the document.
+- **File** (buttons at the top of the Tools palette):
+  - **Open...** (Cmd+O, or drop a file on the window) opens a `.mps` document or a PNG/JPEG/BMP/TGA/GIF image, replacing the current document.
+  - **Save** (Cmd+S) writes the native `.mps` format, keeping layers, masks, blend modes and opacity; **Save As...** (Cmd+Shift+S) picks a new file. A `*` in the title bar means unsaved changes. There is no warning before opening another file over unsaved work.
+  - **Export...** (Cmd+E) writes the composite as PNG (with transparency) or JPEG (flattened onto white).
 - **Undo:** Cmd+Z, or the button at the top of the Layers palette. Undo is single-level as in Photoshop 3: Cmd+Z again redoes.
 - **Layers palette** (right side; drag its title bar to move it):
   - The list shows the top layer first. Click a name to select it; the checkbox shows or hides it. `[mask]` marks a layer with a mask.
@@ -56,6 +61,15 @@ To check the GUI without clicking through it, `--selftest` runs the same actions
 mkdir -p /tmp/shots
 ./build/app/mock_photoshop --selftest /tmp/shots tests/fixtures/selftest_base.png tests/fixtures/selftest_layer.png
 ```
+
+## The .mps format
+
+A zip archive you can open with any zip tool:
+
+- `manifest.json`: `format` ("mock-photoshop"), `version` (1), `width`, `height`, and `layers` from bottom to top, each with `name`, `offset`, `opacity`, `visible`, `blend`, `pixels` (the blob's name) and optionally `mask` (`background` value and `tiles` blob).
+- `layers/<n>/pixels.zst` and `layers/<n>/mask.zst`: zstd-compressed tiles, each a little-endian int32 tile x and y followed by 64x64 pixels (RGBA, or one byte per mask value).
+
+The selection is not saved. Files from a newer format version are refused rather than misread.
 
 ## Editing a document (C++)
 

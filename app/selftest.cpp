@@ -12,6 +12,7 @@
 #include "ps/filters.h"
 #include "effect.h"
 #include "ps/blend.h"
+#include "ps/image_io.h"
 #include "ps/transform.h"
 #include "ps/tools.h"
 
@@ -295,6 +296,31 @@ int run_selftest(const std::string& out_dir, const std::string& base_image,
     check(app->editor().undo_name() == "Transform" && after_bounds.width != before_bounds.width,
           "Scale/Rotate transforms the layer");
     shot("21_after_scale_rotate");
+
+    // Milestone 9: save, reopen and export.
+    check(app->dirty(), "edits mark the document unsaved");
+    const std::string saved = out_dir + "/selftest_document";
+    check(app->save_to(saved) && !app->dirty(), "Save writes .mps and clears the mark");
+    const ps::DocumentState kept = doc().snapshot();
+    const ps::Image kept_picture = doc().flatten();
+    app->new_layer();
+    app->set_opacity(0.3f);
+    check(app->dirty(), "further edits mark it again");
+    check(app->open(saved + ".mps"), "open the saved .mps");
+    check(doc().layers().size() == kept.layers.size() &&
+              doc().layers().at(1).name == kept.layers.at(1).name &&
+              doc().flatten() == kept_picture && !app->dirty(),
+          "the reopened document matches what was saved");
+    shot("22_reopened");
+    check(app->export_to(out_dir + "/selftest_export.png") &&
+              ps::load_image(out_dir + "/selftest_export.png") == kept_picture,
+          "Export PNG writes the composite");
+    check(app->export_to(out_dir + "/selftest_export.jpg"), "Export JPEG");
+    check(!app->save_to("/nonexistent/dir/x") && !app->message().empty(),
+          "a failed save shows an error");
+    check(!app->open(out_dir + "/selftest_export.png.mps") && !app->message().empty(),
+          "opening a missing .mps shows an error");
+    shot("23_error");
   }
   nanogui::shutdown();
   std::printf("%s\n", failures == 0 ? "selftest passed" : "selftest FAILED");

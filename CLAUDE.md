@@ -3,11 +3,12 @@
 ## Project summary
 A raster image editor modeled on Photoshop 3.0-4.0 (layers, masks, blend modes, selections, adjustments, filters, transform). Budget: ~25 hours over ~6 weeks, so work in small, test-backed slices and keep this file current.
 
-**Current milestone:** 9 (File I/O): not started.
-**Next step:** Native save/load: a zip with `manifest.json` (format version from the first write, canvas size, layers with name/offset/opacity/visible/blend, masks) and per-layer tile blobs compressed with zstd or lz4 (pick one; both are installed with Homebrew). Decide the native format's name and extension (open decision below). Round-trip property test: save then load gives the same `DocumentState`. PNG/JPEG export of the composite (JPEG needs libjpeg-turbo or stb's JPEG writer). GUI: Save, Save As, Export with Cmd+S / Cmd+Shift+S, open of the native format, and `--selftest` steps that save and reload.
+**Current milestone:** 10 (Polish the UI): not started. All tier 1 features exist; the definition of done can be walked through in the app.
+**Next step:** Walk the definition of done by hand in the app and fix what gets in the way. Candidates: the known issues below, an unsaved-changes warning before Open, layer thumbnails, drag-reorder, a drawn Curves editor, palette layout at small window sizes. Keep ~2 hours of buffer unspent.
 
 **Known issues** (left on purpose, 2026-10-16):
 - The blend mode menu in the Layers palette opens to the right, off the window's edge, so it can't be seen. Fix: `blend_->set_side(nanogui::Popup::Left)` in `LayersPanel`, as `EffectsPanel` does.
+- No warning before Open replaces a document with unsaved changes (the title bar shows `*`).
 
 ## Build and test
 ```
@@ -57,6 +58,8 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
   - `filter_commands.h`: `FilterCommand(layer, filter)`: the layer's bounds plus the halo, within the canvas, reading a further halo of context; blended by selection weight.
   - `transform.h`: `Matrix3` (translate, scale, rotate clockwise, compose, inverse), `transformed_bounds`, `scale_rotate_about`, `transform_image` (inverse mapping; nearest, bilinear or Catmull-Rom bicubic on premultiplied colour; samples beyond the source repeat its edge, so callers pad with transparency when they want fading edges), `opaque_bounds`.
   - `Document::resize_image` (Image Size: every layer and mask resampled from the canvas area, offsets reset, off-canvas pixels dropped, deselects) and `Document::transform_layer` (one layer and its mask through a matrix). Commands in `transform_commands.h`: `ImageSizeCommand`, `TransformLayerCommand`; `CropToSelectionCommand` in `canvas_commands.h`.
+  - `native_format.h`: `.mps` save/load (`encode_native`/`decode_native` in memory, `save_native`/`load_native` on disk, writing to `<path>.saving` then renaming). Zip via vendored miniz; `manifest.json` via vendored nlohmann/json (format "mock-photoshop", `kNativeFormatVersion` = 1, newer versions refused); one zstd blob per layer's pixels and mask, as records of tile x, y and raw tile bytes. Selection not saved. `TileStore::tile_coords()` enumerates tiles for it.
+  - `image_io` also has `save_jpeg` (flattened onto white) and `save_image` (PNG or JPEG by extension).
   - `tools.h`: `Tool` state machines (press, drag, release, cancel) for every `ToolKind` but the eyedropper; each makes one command on release, and `command()` gives the in-progress command for previews. `ToolSettings` is captured at press.
   - `Command`: base class for every edit. Subclasses hold their parameters as public const values and implement `name()` and `apply(doc)`. The base class provides `execute`, `undo` and `redo`: `execute` snapshots the document first and restores it if `apply` throws; undo and redo swap the saved snapshot with the current state.
   - `layer_commands.h`, `pixel_commands.h`, `canvas_commands.h`, `selection_commands.h`, `paint_commands.h`: the concrete commands, header-only.
@@ -65,16 +68,16 @@ cmake -S . -B build -DPS_BUILD_APP=OFF           # core and tests only, skips Na
   - `image_io`: load (PNG/JPEG/BMP/TGA/GIF) and PNG save through stb (compiled static; NanoGUI bundles its own copy). *(Overlaps milestone 9; it exists because the viewer and golden tests need it. JPEG export and the native format are still milestone 9.)*
 - `app/` (`mock_photoshop`): NanoGUI shell. No editing logic here.
   - **The GUI exists and grows with the core.** Each milestone adds its controls (see Scope). Widgets only read `editor.document()` and issue commands; anything with logic goes in `core/` so it can be tested headless.
-  - `App` (`app.h`): the main window. Holds the `Editor`, the selected layer index and the tool state (UI state, not document state). Its public actions (`open_as_layer`, `set_blend`, `add_mask`, `toggle_undo`, ...) are what widgets and shortcuts call; each builds a command and runs it, showing errors in the status bar. Widgets are rebuilt in `refresh()` from `draw_all`, never inside their own callbacks.
+  - `App` (`app.h`): the main window. Holds the `Editor`, the selected layer index and the tool state (UI state, not document state), and the document's name, `.mps` path and a change counter for the title bar's `*`. `open` reads `.mps` or images; `save_to`, `export_to` and the Save/Save As/Export dialogs. Its public actions (`open_as_layer`, `set_blend`, `add_mask`, `toggle_undo`, ...) are what widgets and shortcuts call; each builds a command and runs it, showing errors in the status bar. Widgets are rebuilt in `refresh()` from `draw_all`, never inside their own callbacks.
   - `CanvasView`: draws through `nanogui::ImageView` but takes zoom and pan from `ps::Viewport`. Left-button gestures go to a `PointerHandler` in document coordinates; right-drag or Space+drag pans. Re-uploads the whole flattened composite (plus selection outline) after each change; per-tile upload can come later if it is slow.
-  - `ToolsPanel`: the Tools palette window: tool buttons, foreground colour picker, Size/Hardness/Opacity/Tolerance sliders, Paint on Layer/Mask, Select All/None/Inverse, feather radius and Feather, and Image buttons (rotate, flip, crop to selection).
+  - `ToolsPanel`: the Tools palette window: File buttons (Open, Save, Save As, Export), tool buttons, foreground colour picker, Size/Hardness/Opacity/Tolerance sliders, Paint on Layer/Mask, Select All/None/Inverse, feather radius and Feather, and Image buttons (rotate, flip, crop to selection).
   - `effect.h`: `Effect`, the Image palette's flat variant of every adjustment, filter and transform (`ImageSizeEffect`, `CanvasSizeEffect`, `LayerTransformEffect` hold palette-friendly percents), `kEffectMenus`, `default_effect`, `effect_name`, and `effect_command(layer, effect, doc, preview)`, which builds the real command (bilinear when previewing, bicubic on Apply).
   - `EffectsPanel`: the Image palette (docked under Layers): Adjust..., Filter... and Transform... menus (opening to the left, over the canvas), sliders per kind (Curves as three output sliders at 64/128/192, not a drawn curve), Apply/Cancel. Sliders are rebuilt only when the kind changes.
   - `App` also owns the current `Tool` and its `ToolSettings`, and a pending (previewed) `Effect`. A tool press drops a pending effect. Each applied Add Noise gets a new seed. While an effect is pending or a gesture is active, `show_canvas` runs that command on a copy of the document and shows the copy, so previews use the same code as the real edit.
   - `LayersPanel`: the Layers palette window. Undo/redo toggle, blend mode, opacity (command on slider release), layer rows (top first: visibility checkbox, select button), New/Delete/Up/Down, Open Image as Layer, mask Reveal All/Hide All/Remove.
   - `selftest.cpp`: `--selftest out_dir base.png layer.png` drives `App`'s actions, checks the document and saves screenshots via `App::capture` (reads the back buffer in `draw_teardown`). Fixtures in `tests/fixtures/`.
 - `tests/`: Catch2 v3. Golden PNGs in `tests/golden/`, compared exactly; mismatches are written to `build/tests/output/`.
-- `third_party/stb/`: vendored headers. Catch2 and NanoGUI come through FetchContent.
+- `third_party/`: vendored stb (image I/O), miniz 3.0.2 (zip) and nlohmann/json 3.11.3. zstd comes from the system via pkg-config (`brew install zstd`). Catch2 and NanoGUI come through FetchContent.
 
 ## Layering
 ```
@@ -150,7 +153,7 @@ Document
 - [x] **6. Adjustments (2h):** levels, curves, hue/saturation, brightness/contrast, invert
 - [x] **7. Filters (1.5h):** Gaussian blur, unsharp mask, noise, motion blur, optionally emboss/find edges
 - [x] **8. Transform (2.5h):** crop, canvas/image size, scale/rotate with bicubic resampling *(scale/rotate by sliders on a whole layer, not on-canvas handles or a selection; no pre-blur when shrinking, so large reductions can alias)*
-- [ ] **9. File I/O (2h):** native save/load, PNG/JPEG import/export
+- [x] **9. File I/O (2h):** native save/load, PNG/JPEG import/export
 - [ ] **10. Polish the UI (1h):** *(reduced: GUI now built per milestone)* layer thumbnails, drag-reorder, shortcuts, layout. The panels and tools themselves arrive with milestones 4b-9.
 
 ### Tier 2: only if ahead of schedule
@@ -186,7 +189,6 @@ Document
 Open a PNG or JPEG, add layers with blend modes and masks, make selections, paint, apply adjustments and filters, transform, undo the last action, and save and reload in the native format.
 
 ## Open decisions
-- Native format name and extension
 - Eigen vs GLM
 
 ## Session log
@@ -198,3 +200,4 @@ Open a PNG or JPEG, add layers with blend modes and masks, make selections, pain
 - Session 3 (2026-10-16), milestone 6: adjustments core (LUTs, monotone curves, HSL), `AdjustCommand`, six goldens, Adjustments palette with live preview, Apply/Cancel. Curves GUI simplified to three sliders (a drawn curve editor is milestone 10 polish if wanted). Self-test at 40 checks; screenshots inspected.
 - Session 3 (2026-10-16), milestone 7: four filters with goldens, `FilterCommand`, the Adjustments palette widened to Adjustments & Filters with Adjust... and Filter... menus opening left (fixes the off-screen adjustment menu too). Emboss/find edges skipped. Found while testing: an open popup draws empty on its first frame (clip from the previous frame), so the self-test captures open menus twice. Self-test at 44 checks; screenshots inspected.
 - Session 3 (2026-10-16), milestone 8: `Matrix3`/`transform_image` (nearest, bilinear, bicubic), Image Size, layer Scale/Rotate (with mask), Crop to Selection, Transform menu and canvas buttons in the GUI. Self-test at 53 checks; screenshots inspected.
+- Session 3 (2026-10-16), milestone 9: `.mps` native format (zip + JSON manifest + zstd tile blobs; extension `.mps` chosen 2026-10-16, user did not object), JPEG export, Open/Save/Save As/Export in the GUI with an unsaved-changes `*`. Self-test at 62 checks; screenshots inspected; the saved file was also checked with unzip and zstd.

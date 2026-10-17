@@ -57,6 +57,15 @@ ToolsPanel::ToolsPanel(nanogui::Widget* parent, ToolsPanelActions actions)
   set_fixed_width(kWidth);
   set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
 
+  Widget* file = new Widget(this);
+  file->set_layout(new nanogui::GridLayout(Orientation::Horizontal, 2,
+                                           Alignment::Fill, 0, 4));
+  const int half = (kInner - 4) / 2;
+  button(file, "Open...", half, [this] { actions_.open(); });
+  button(file, "Save", half, [this] { actions_.save(); });
+  button(file, "Save As...", half, [this] { actions_.save_as(); });
+  button(file, "Export...", half, [this] { actions_.export_image(); });
+
   Widget* grid = new Widget(this);
   grid->set_layout(new nanogui::GridLayout(Orientation::Horizontal, 2,
                                            Alignment::Fill, 0, 4));

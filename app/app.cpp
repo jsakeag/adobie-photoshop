@@ -15,6 +15,7 @@
 #include "layers_panel.h"
 #include "ps/canvas_commands.h"
 #include "ps/image_io.h"
+#include "ps/native_format.h"
 #include "ps/layer_commands.h"
 #include "ps/selection_commands.h"
 #include "tools_panel.h"
@@ -22,6 +23,10 @@
 namespace {
 
 constexpr int kStatusHeight = 24;
+
+const std::vector<std::pair<std::string, std::string>> kOpenTypes = {
+    {"mps", "Mock Photoshop"}, {"png", "PNG"}, {"jpg", "JPEG"}, {"jpeg", "JPEG"},
+    {"bmp", "BMP"}, {"tga", "Targa"}, {"gif", "GIF"}};
 
 const std::vector<std::pair<std::string, std::string>> kImageTypes = {
     {"png", "PNG"}, {"jpg", "JPEG"}, {"jpeg", "JPEG"},
@@ -61,6 +66,10 @@ App::App() : nanogui::Screen(nanogui::Vector2i(1280, 800), "Mock Photoshop") {
   tool_actions.rotate_canvas = [this](ps::Rotation r) { rotate_canvas(r); };
   tool_actions.flip_canvas = [this](ps::FlipAxis a) { flip_canvas(a); };
   tool_actions.crop_to_selection = [this] { crop_to_selection(); };
+  tool_actions.open = [this] { open_dialog(); };
+  tool_actions.save = [this] { save(); };
+  tool_actions.save_as = [this] { save_as_dialog(); };
+  tool_actions.export_image = [this] { export_dialog(); };
   tools_ = new ToolsPanel(this, std::move(tool_actions));
   set_tool(tool_kind_);
 
@@ -91,7 +100,10 @@ App::App() : nanogui::Screen(nanogui::Vector2i(1280, 800), "Mock Photoshop") {
 
 bool App::open(const std::string& path) {
   try {
-    set_document(ps::Document(ps::load_image(path)), path);
+    const bool native = ps::is_native_path(path);
+    set_document(native ? ps::load_native(path) : ps::Document(ps::load_image(path)),
+                 path);
+    doc_path_ = native ? path : "";
     return true;
   } catch (const std::exception& e) {
     message_ = e.what();
@@ -127,7 +139,9 @@ void App::toggle_undo() {
   tool_cancel();
   if (editor_.toggle_undo()) {
     message_.clear();
+    ++changes_;
     canvas_stale_ = palettes_stale_ = true;
+    update_caption();
   }
 }
 
@@ -333,23 +347,87 @@ bool App::run(std::unique_ptr<ps::Command> command) {
     return false;
   }
   message_.clear();
+  ++changes_;
   canvas_stale_ = palettes_stale_ = true;
+  update_caption();
   return true;
 }
 
 void App::set_document(ps::Document document, const std::string& name) {
   tool_cancel();
   editor_ = ps::Editor(std::move(document));
-  selected_ = editor_.document().layers().size() - 1;
+  selected_ = editor_.document().layers().empty()
+                  ? 0
+                  : editor_.document().layers().size() - 1;
   message_.clear();
+  doc_name_ = name;
+  doc_path_.clear();
+  saved_changes_ = changes_;
   canvas_->show(editor_.document().flatten());
-  set_caption(name + " - Mock Photoshop");
   canvas_stale_ = palettes_stale_ = true;
+  update_caption();
+}
+
+bool App::save_to(const std::string& path) {
+  std::string target = path;
+  if (!ps::is_native_path(target)) target += ps::kNativeExtension;
+  try {
+    ps::save_native(editor_.document(), target);
+  } catch (const std::exception& e) {
+    message_ = e.what();
+    return false;
+  }
+  doc_path_ = target;
+  doc_name_ = target;
+  saved_changes_ = changes_;
+  message_ = "Saved " + target;
+  update_caption();
+  return true;
+}
+
+bool App::export_to(const std::string& path) {
+  try {
+    ps::save_image(editor_.document().flatten(), path);
+  } catch (const std::exception& e) {
+    message_ = e.what();
+    return false;
+  }
+  message_ = "Exported " + path;
+  return true;
+}
+
+void App::save() {
+  if (doc_path_.empty()) {
+    save_as_dialog();
+  } else {
+    save_to(doc_path_);
+  }
+}
+
+void App::save_as_dialog() {
+  const std::vector<std::string> paths = nanogui::file_dialog(
+      this, nanogui::FileDialogType::Save, {{"mps", "Mock Photoshop"}});
+  if (!paths.empty()) save_to(paths.front());
+}
+
+void App::export_dialog() {
+  const std::vector<std::string> paths = nanogui::file_dialog(
+      this, nanogui::FileDialogType::Save, {{"png", "PNG"}, {"jpg", "JPEG"}});
+  if (!paths.empty()) export_to(paths.front());
+}
+
+void App::update_caption() {
+  const std::string caption =
+      doc_name_ + (dirty() ? " *" : "") + " - Mock Photoshop";
+  if (caption != caption_) {
+    caption_ = caption;
+    set_caption(caption);
+  }
 }
 
 void App::open_dialog() {
   const std::vector<std::string> paths =
-      nanogui::file_dialog(this, nanogui::FileDialogType::Open, kImageTypes);
+      nanogui::file_dialog(this, nanogui::FileDialogType::Open, kOpenTypes);
   if (!paths.empty()) open(paths.front());
 }
 
@@ -426,6 +504,14 @@ bool App::keyboard_event(int key, int scancode, int action, int modifiers) {
   if (modifiers & (GLFW_MOD_SUPER | GLFW_MOD_CONTROL)) {
     switch (key) {
       case GLFW_KEY_O: open_dialog(); return true;
+      case GLFW_KEY_S:
+        if (modifiers & GLFW_MOD_SHIFT) {
+          save_as_dialog();
+        } else {
+          save();
+        }
+        return true;
+      case GLFW_KEY_E: export_dialog(); return true;
       case GLFW_KEY_Z: toggle_undo(); return true;
       case GLFW_KEY_A: select_all(); return true;
       case GLFW_KEY_D: deselect(); return true;

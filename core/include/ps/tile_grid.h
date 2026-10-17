@@ -29,6 +29,8 @@ class TileGrid {
   std::vector<TileCoord> changed_tiles(const TileGrid& other) const {
     return store_.changed_tiles(other.store_);
   }
+  // Every allocated tile, in no particular order.
+  std::vector<TileCoord> tile_coords() const { return store_.tile_coords(); }
   // Smallest tile-aligned rectangle covering every allocated tile.
   Rect bounds() const { return store_.bounds(); }
   // Whether any allocated tile overlaps r.
