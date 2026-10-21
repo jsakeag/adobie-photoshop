@@ -1,2 +1,23 @@
+# Build output (the README builds into build/)
 build/
+build-*/
+cmake-build-*/
+
+# CMake files from an accidental in-source configure
+/CMakeCache.txt
+/CMakeFiles/
+CMakeUserPresets.json
+compile_commands.json
+
+# Editors and tools
+.cache/
+.vscode/
+.idea/
+*.swp
 .DS_Store
+
+# Claude Code per-user settings
+.claude/settings.local.json
+
+# Left behind by an interrupted native save (written to <path>.saving, then renamed)
+*.saving

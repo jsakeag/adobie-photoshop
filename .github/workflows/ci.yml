@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core-tests:
+    # macOS on Apple Silicon, like the development machine: the goldens are
+    # compared exactly, and another platform's libm could differ in the last bit.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install zstd pkgconf
+      - name: Configure (core and tests, no NanoGUI app)
+        run: cmake -S . -B build -DPS_BUILD_APP=OFF
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Upload golden mismatches
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-mismatches
+          path: build/tests/output/
+          if-no-files-found: ignore

@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+# Golden images and fixtures are compared byte for byte; never touch them.
+*.png binary
+*.jpg binary
+*.mps binary
+
+# Keep vendored libraries out of GitHub's language stats and diffs.
+third_party/** linguist-vendored

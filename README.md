@@ -15,6 +15,8 @@ cmake -S . -B build && cmake --build build -j
 
 Add `-DPS_BUILD_APP=OFF` to the first command to skip the NanoGUI app.
 
+On GitHub, [CI](.github/workflows/ci.yml) builds the core and runs the test suite on macOS for every push to `main` and every pull request. It skips the app and the `--selftest` GUI checks, which need a window. If a golden comparison fails, the mismatched images can be downloaded from the run's artifacts.
+
 ## Run the app
 
 ```
